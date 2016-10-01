@@ -4,14 +4,14 @@
   "description": "Grunt site generator for webhook",
   "repository": {
     "type": "git",
-    "url": "git://github.com/webhook/webhook-generate.git"
+    "url": "git://github.com/risd/webhook-generate.git"
   },
   "author": "Webhook",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/webhook/webhook-generate/issues"
+    "url": "https://github.com/risd/webhook-generate/issues"
   },
-  "homepage": "https://github.com/webhook/webhook-generate",
+  "homepage": "https://github.com/risd/webhook-generate",
   "dependencies": {
     "grunt": "~0.4.2",
     "firebase": "1.0.2",
