@@ -73,6 +73,10 @@ Function = wrap;
 
 var cmsSocketPort = 6557;
 
+var unescapeSite = function(site) {
+  return site.replace(/,1/g, '.');
+}
+
 /**
  * Generator that handles various commands
  * @param  {Object}   config     Configuration options from .firebase.conf
@@ -1443,7 +1447,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if(copyCms) {
       var cmsFile = fs.readFileSync('./libs/cms.html');
 
-      var cmsTemplated = _.template(cmsFile, { siteName: sitename });
+      var cmsTemplated = _.template(cmsFile, { siteName: unescapeSite(sitename) });
 
       mkdirp.sync('./pages/');
 
