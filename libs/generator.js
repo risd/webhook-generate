@@ -1436,7 +1436,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
 
     // TODO: Grab bucket information from server eventually, for now just use the site name
-    var templated = _.template(confFile, { secretKey: secretkey, siteName: sitename, firebase: firebase, embedlyKey: oldConf.embedly || embedly || 'your-embedly-key', serverAddr: oldConf.server || server || 'your-server-address', noSearch: noSearch, imageproxy: oldConf.imageproxy || null });
+    var templated = _.template(confFile, { secretKey: secretkey, siteName: sitename, firebase: firebase, embedlyKey: embedly || oldConf.embedly || 'your-embedly-key', serverAddr: server || oldConf.server || 'your-server-address', noSearch: noSearch, imageproxy: oldConf.imageproxy || null });
 
     fs.writeFileSync('./.firebase.conf', templated);
 
