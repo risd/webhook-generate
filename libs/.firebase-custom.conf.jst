@@ -1,10 +1,13 @@
 {
-  "secretKey"   : "<%= secretKey %>",
-  "siteName"   : "<%= siteName %>",
-  "firebase"   : "<%= firebase %>",
-  "embedly"    : "<%= embedlyKey %>",
-  "server"     : "<%= serverAddr %>",
-  "custom"     : true<% if (noSearch) { %>,
-  "noSearch"   : <%= noSearch %><% } %><% if (imageproxy) { %>,
-  "imageproxy" : "<%= imageproxy %>"<% } %>
+  "secretKey"     : "<%= secretKey %>",
+  "siteName"      : "<%= siteName %>",
+  "firebase"      : "<%= firebase %>",
+  "embedly"       : "<%= embedlyKey %>",
+  "server"        : "<%= serverAddr %>",
+  "imgix_host"    : "<%= imgix_host %>",
+  "imgix_secret"  : "<%= imgix_secret %>",
+  "generator_url" : "<%= generator_url %>",
+  "custom"        : true<% if (noSearch) { %>,
+  "noSearch"      : <%= noSearch %><% } %><% if (imageproxy) { %>,
+  "imageproxy"    : "<%= imageproxy %>"<% } %>
 }

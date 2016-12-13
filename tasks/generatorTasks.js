@@ -174,8 +174,11 @@ module.exports = function(grunt) {
     var embedly = grunt.option('embedly');
     var copyCms = grunt.option('copycms');
     var firebase = grunt.option('firebase');
+    var imgix_host = grunt.option('imgix_host');
+    var imgix_secret = grunt.option('imgix_secret');
+    var generator_url = grunt.option('generator_url');
 
-    generator.init(sitename, secretkey, copyCms, firebase, server, embedly, done);
+    generator.init(sitename, secretkey, copyCms, firebase, server, embedly, imgix_host, imgix_secret, generator_url, done);
   });
 
   // Check if initialized properly before running all these tasks
