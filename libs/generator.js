@@ -542,7 +542,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
                     config.get('webhook').imgix_secret,
                     config.get('webhook').generator_url,
                     function () {
-                    callback();
+                      callback();
                     }
                   );
                 });
