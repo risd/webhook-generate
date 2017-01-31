@@ -102,7 +102,7 @@ module.exports.swigFunctions = function(swig) {
           }
         }
 
-        types.push({ slug: slug, name: self.typeInfo[key].name, id: key });
+        types.push({ slug: slug, name: self.typeInfo[key].name, id: key, typeInfo: self.typeInfo[key] });
       }
     }
 
