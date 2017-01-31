@@ -1,7 +1,7 @@
 {
   "name": "webhook-generate",
   "version": "0.0.1",
-  "description": "Grunt site generator for webhook",
+  "description": "Grunt site generator for risd/webhook",
   "repository": {
     "type": "git",
     "url": "git://github.com/risd/webhook-generate.git"
@@ -10,6 +10,9 @@
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/risd/webhook-generate/issues"
+  },
+  "scripts": {
+    "start": "rm-wh serve"
   },
   "homepage": "https://github.com/risd/webhook-generate",
   "dependencies": {
@@ -26,9 +29,13 @@
     "async": "~0.2.10",
     "marked": "~0.3.1",
     "grunt-usemin": "~2.0.2",
+    "grunt-autoprefixer": "^3.0.4",
+    "grunt-browserify": "^5.0.0",
     "grunt-contrib-concat": "~0.3.0",
     "grunt-contrib-cssmin": "~0.9.0",
     "grunt-contrib-uglify": "~0.4.0",
+    "grunt-contrib-jshint": "^1.1.0",
+    "grunt-contrib-sass": "^1.0.0",
     "grunt-rev": "~0.1.0",
     "imgix-core-js": "^1.0.4",
     "win-spawn": "~2.0.0",
