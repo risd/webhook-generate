@@ -14,8 +14,10 @@ results
 
 npm-debug.log
 node_modules
+.sass-cache
+*.map
 
-/.build
-/.firebase.conf
+.build
+.firebase.conf
 
 .push.zip
