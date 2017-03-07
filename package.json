@@ -12,7 +12,8 @@
     "url": "https://github.com/risd/webhook-generate/issues"
   },
   "scripts": {
-    "start": "rm-wh serve"
+    "start": "rm-wh serve",
+    "deploy": "rm-wh deploy"
   },
   "homepage": "https://github.com/risd/webhook-generate",
   "dependencies": {
