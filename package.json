@@ -13,7 +13,7 @@
   },
   "scripts": {
     "start": "rm-wh serve",
-    "deploy": "rm-wh deploy"
+    "deploy": "rm-wh deploy --branch=master"
   },
   "homepage": "https://github.com/risd/webhook-generate",
   "dependencies": {
