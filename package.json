@@ -13,6 +13,7 @@
   },
   "scripts": {
     "start": "rm-wh serve",
+    "deploy:fonts": "rm-gcloud-put-dir fonts --siteName=cdn --at=fonts",
     "deploy": "rm-wh deploy --branch=master"
   },
   "homepage": "https://github.com/risd/webhook-generate",
