@@ -1,0 +1,111 @@
+figure {
+
+}
+
+figcaption {
+
+}
+
+figure[data-type=table] {
+
+}
+
+figure[data-type=video] {
+  figcaption {
+
+  }
+
+  &.wy-figure-right {
+
+  }
+
+  &.wy-figure-right .wy-figure-controls {
+
+  }
+
+  &.wy-figure-left {
+
+  }
+
+  &.wy-figure-full {
+    p {
+
+    }
+
+    iframe {
+
+    }
+  }
+}
+
+figure[data-type=video] p {
+
+}
+
+figure[data-type=video].wy-figure-full p {
+
+}
+
+figure[data-type=video].wy-figure-full iframe {
+
+}
+
+figure[data-type=image] {
+  &.wy-figure-right {
+
+  }
+
+  &.wy-figure-right .wy-figure-controls {
+
+  }
+
+  &.wy-figure-left {
+
+  }
+
+  &.wy-figure-large {
+
+  }
+
+  &.wy-figure-medium {
+
+  }
+
+  &.wy-figure-small {
+
+  }
+
+  figcaption {
+
+  }
+
+  img {
+
+  }
+}
+
+figure[data-type=quote] {
+  &.wy-figure-right {
+    blockquote {
+
+    }
+  }
+
+  &.wy-figure-right .wy-figure-controls {
+
+  }
+
+  &.wy-figure-left {
+
+  }
+
+  blockquote {
+
+  }
+
+  cite {
+    &:before {
+      content: "—";
+    }
+  }
+}

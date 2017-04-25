@@ -13,7 +13,6 @@
   },
   "scripts": {
     "start": "rm-wh serve",
-    "deploy:fonts": "rm-gcloud-put-dir static/fonts --siteName=cdn --at=fonts",
     "deploy": "rm-wh deploy --branch=master"
   },
   "homepage": "https://github.com/risd/webhook-generate",
@@ -33,11 +32,10 @@
     "grunt-usemin": "~2.0.2",
     "grunt-autoprefixer": "^3.0.4",
     "grunt-browserify": "^5.0.0",
-    "grunt-contrib-concat": "~0.3.0",
     "grunt-contrib-cssmin": "~0.9.0",
     "grunt-contrib-uglify": "~0.4.0",
     "grunt-contrib-jshint": "^1.1.0",
-    "grunt-contrib-sass": "^1.0.0",
+    "grunt-sass": "^2.0.0",
     "grunt-rev": "~0.1.0",
     "imgix-core-js": "^1.0.4",
     "win-spawn": "~2.0.0",
@@ -48,11 +46,17 @@
     "MD5": "~1.2.1",
     "swig": "~1.4.1",
     "moment": "~2.8.1",
+    "picturefill": "^2.3.1",
+    "packery": "^1.4.3",
     "tiny-lr": "~0.1.0",
     "cheerio": "~0.18.0",
     "grunt-contrib-connect": "~0.9.0",
     "grunt-connect-proxy": "~0.2",
     "nodejs-websocket": "~1.2.0",
+    "node-bourbon": "^4.2.3",
+    "node-neat": "^1.7.2",
+    "imagesloaded": "^3.1.8",
+    "node-sass": "^4.5.2",
     "grunt-simple-watch": "~0.1.2"
   }
 }
