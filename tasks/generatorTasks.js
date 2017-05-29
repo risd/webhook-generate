@@ -1,5 +1,5 @@
 
-var curVersion = 'v55';
+var curVersion = 'v56';
 
 var request = require('request');
 
@@ -41,30 +41,6 @@ module.exports = function(grunt) {
   var npmCache = grunt.option('npmcache');
 
   var generator = require('../libs/generator').generator(grunt.config, { npm: npmBin, node: nodeBin, grunt: gruntBin, token: token, email: email, npmCache: npmCache }, grunt.log, grunt.file, root);
-
-  grunt.registerTask('buildTemplates', 'Generate static files from templates directory', function() {
-    var done = this.async();
-
-    var production = grunt.option('production');
-
-    if(production === true) {
-      generator.enableProduction();
-    }
-
-    generator.renderTemplates(done, generator.reloadFiles);
-  });
-
-  grunt.registerTask('buildPages', 'Generate static files from pages directory', function() {
-    var done = this.async();
-
-    var production = grunt.option('production');
-
-    if(production === true) {
-      generator.enableProduction();
-    }
-
-    generator.renderPages(done, generator.reloadFiles);
-  });
 
   grunt.registerTask('scaffolding', 'Generate scaffolding for a new object', function(name) {
     var done = this.async();
@@ -108,6 +84,75 @@ module.exports = function(grunt) {
     generator.cleanFiles(done);
   });
 
+  grunt.registerTask('build-order', 'List the current build order for the site', function () {
+    var done = this.async();
+    generator.buildOrder( done )
+  })
+
+  // Build individual page
+  grunt.registerTask('build-page', 'Build a single template file.', function (){
+    var done = this.async();
+    var options = {
+      inFile:  grunt.option('inFile'),
+      outFile: grunt.option('outFile') || undefined,
+      data: grunt.option('data') || undefined,
+      emitter: grunt.option('emitter') || undefined,
+    }
+
+    generator.renderPage(options, done);
+  });
+
+  // Build individual template
+  grunt.registerTask('build-template', 'Build a single template file.', function () {
+    var done = this.async();
+    var options = {
+      file: grunt.option('inFile'),
+      emitter: grunt.option('emitter') || false,
+      data: grunt.option('data') || undefined,
+      itemKey: grunt.option('itemKey') || undefined,
+    }
+
+    generator.renderTemplate(options, done);
+  });
+
+  grunt.registerTask('build-pages', 'Generate static files from pages directory', function() {
+    var done = this.async();
+
+    var production = grunt.option('production');
+
+    if(production === true) {
+      generator.enableProduction();
+    }
+
+    var options = {
+      concurrency: concurrencyOption( grunt.option('concurrency') ),
+      emitter: grunt.option('emitter') || false,
+      data: grunt.option('data') || undefined,
+      pages: grunt.option('pages') || undefined,
+    };
+
+    generator.renderPages(options, done, generator.reloadFiles);
+  });
+
+  grunt.registerTask('build-templates', 'Generate static files from templates directory', function() {
+    var done = this.async();
+
+    var production = grunt.option('production');
+
+    if(production === true) {
+      generator.enableProduction();
+    }
+
+    var options = {
+      concurrency: concurrencyOption( grunt.option('concurrency') ),
+      emitter: grunt.option('emitter') || false,
+      data: grunt.option('data') || undefined,
+      templates: grunt.option('templates') || undefined,
+    };
+
+    generator.renderTemplates(options, done, generator.reloadFiles);
+  });
+
   grunt.registerTask('build-static', 'Just builds the static files, meant to be used with watch tasks.', function() {
     var done = this.async();
 
@@ -123,8 +168,12 @@ module.exports = function(grunt) {
       generator.enableProduction();
     }
 
+    var options = {
+      emitter: grunt.option('emitter') || false,
+    };
+
     checkVersion(function() {
-      generator.buildStatic(done);
+      generator.buildStatic(options, done);
     })
   });
 
@@ -144,9 +193,25 @@ module.exports = function(grunt) {
       generator.enableProduction();
     }
 
+    var options = {
+      concurrency: concurrencyOption( grunt.option('concurrency') ),
+      emitter: grunt.option('emitter') || false,
+      data: grunt.option('data') || undefined,
+      pages: grunt.option('pages') || undefined,
+      templates: grunt.option('templates') || undefined,
+    };
+
     checkVersion(function() {
-      generator.buildBoth(done);
+      generator.buildBoth(options, done);
     })
+  });
+
+  grunt.registerTask('download-data', 'Downloads the site data to the common cached path. `./.build/data.json`.', function () {
+    var done = this.async();
+    var options = {
+      file: grunt.option('toFile') || undefined,
+    }
+    generator.downloadData( options, done );
   });
 
   // Change this to optionally prompt instead of requiring a sitename
@@ -192,3 +257,10 @@ module.exports = function(grunt) {
 };
 
 module.exports.version = curVersion;
+
+// concurrency option value defaults to half the available cpus
+function concurrencyOption ( concurrencyOptionValue ) {
+  if ( typeof concurrencyOptionValue === 'number' ) return Math.floor( concurrencyOptionValue )
+  if ( concurrencyOptionValue === 'max' ) return require('os').cpus().length;
+  return require('os').cpus().length / 2;
+}

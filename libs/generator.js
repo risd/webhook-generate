@@ -15,6 +15,8 @@ var websocketServer = require('nodejs-websocket');
 var Zip   = require('adm-zip');
 var slug = require('uslug');
 var async = require('async');
+var miss = require('mississippi');
+var touch = require('touch')
 var spawn = require('win-spawn');
 var md5 = require('MD5');
 var $ = require('cheerio');
@@ -74,6 +76,8 @@ Function = wrap;
 //console.log = function () {};
 
 var cmsSocketPort = 6557;
+var BUILD_DIRECTORY = '.build';
+var DATA_CACHE_PATH = [ BUILD_DIRECTORY, 'data.json' ].join('/');
 
 /**
  * Generator that handles various commands
@@ -140,6 +144,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     if(self.cachedData)
     {
+      if (self.cachedData.hasOwnProperty('contentType'))
+        self.cachedData.typeInfo = self.cachedData.contentType
       swigFunctions.setData(self.cachedData.data);
       swigFunctions.setTypeInfo(self.cachedData.typeInfo);
       swigFunctions.setSettings(self.cachedData.settings);
@@ -215,6 +221,28 @@ module.exports.generator = function (config, options, logger, fileParser) {
       }
     });
   };
+
+  /**
+   * downloadData function to download data to a file path for files
+   * to continually use as they are built between processes.
+   * Defaults saving to DATA_CACHE_PATH
+   * 
+   * @param  {object}   options
+   * @param  {object}   options.file?     Specificy which file to write to. Optional.
+   * @param  {object}   options.emitter?  Specificy whether to emit progress to process.stout
+   * @param  {Function} done
+   */
+  this.downloadData = function ( options, done ) {
+    if ( typeof done === 'undefined' ) done = options;
+    if ( !options ) options = {};
+    if ( !options.file ) options.file = DATA_CACHE_PATH;
+
+
+    getData( function ( data ) {
+      writeDataCache( { file: options.file, data: self.cachedData } )
+      done();
+    } );
+  }
 
   var searchEntryStream = null;
 
@@ -306,11 +334,183 @@ module.exports.generator = function (config, options, logger, fileParser) {
     body = '';
   };
 
+  function defaultBuildOrder ( callback ) {
+    var includeExtensions = filterExtensions([ '.html', '.xml', '.swig' ])
+
+    var opts = { files: [] };
+    
+    return miss.pipe(
+      miss.from.obj( [ opts, null ] ),
+      getTemplates(),
+      getPages(),
+      sink(),
+      function onComplete ( error ) {
+        if ( error ) callback( error )
+      } )
+
+    function getTemplates () {
+      return miss.through.obj( function ( opts, enc, next ) {
+        wrench.readdirRecursive('templates', function ( error, templateFiles ) {
+          if ( error ) return next( error )
+
+          if ( Array.isArray( templateFiles ) ) {
+            var includeTemplateFiles = templateFiles
+              .filter(removePartials)
+              .filter(includeExtensions)
+              .sort()
+              .map(prefixFile('templates'))
+
+            opts.files = opts.files.concat( includeTemplateFiles );
+          }
+          else return next( null, opts )
+        })
+      } )
+    }
+
+    function getPages () {
+      return miss.through.obj( function ( opts, enc, next ) {
+        wrench.readdirRecursive('pages', function ( error, pageFiles ) {
+          if ( error ) return next( error )
+
+          if ( Array.isArray( pageFiles ) ) {
+            var includePageFiles = pageFiles
+              .filter(includeExtensions)
+              .sort()
+              .map(prefixFile('pages'))
+
+            opts.files = opts.files.concat( includePageFiles );
+          }
+          else return next( null, opts )
+        })
+      } )
+    }
+
+    function sink () {
+      return miss.through.obj( function ( opts, enc, next ) {
+        callback( null, opts.files )
+        next();
+      } )
+    }
+
+    function removePartials ( file ) {
+      return file.indexOf( 'partials' ) === -1;
+    }
+    function filterExtensions ( extensions ) {
+      return function filterer ( file ) {
+        return extensions.filter( function ( extension ) { return file.endsWith( extension ) } ).length === 1;
+      }
+    }
+    function prefixFile ( prefix ) {
+      return function prefixer ( file ) {
+        return [ prefix, file ].join( '/' )
+      }
+    }
+  }
+
+  /**
+   * Build Order
+   * Creates a `.build-order` directory if it does not exists.
+   * Sets the `default` build order, and opens an `ordered`.
+   * These are used by the server to determine the order in which
+   * templates are built and uploaded.
+   * 
+   * @param  {Function} callback Callback is executed with an array of the files
+   */
+  this.buildOrder = function ( callback ) {
+    var opts = {
+      folder: '.build-order',
+      defaultFile: undefined,
+      orderedFile: undefined,
+    };
+
+    return miss.pipe(
+      miss.from.obj([ opts, null ]),
+      makeFolder(),
+      writeDefault(),
+      touchOrdered(),
+      sink(),
+      function onComplete ( error ) {
+        if ( error ) callback( error )
+        else callback();
+      })
+    
+    function makeFolder () {
+      return miss.through.obj( function ( opts, enc, next ) {
+        mkdirp( opts.folder, function ( error ) {
+          if ( error ) return next( error )
+
+          next( null, opts )
+        } )
+      } )
+    }
+
+    function writeDefault () {
+      var fileName = 'default';
+
+      return miss.through.obj( function ( opts, enc, next ) {
+        defaultBuildOrder( function ( error, files ) {
+          if ( error ) return next( error )
+
+          var file =  [ opts.folder, fileName ].join( '/' )
+          var content = files.join( '\n' ) + '\n';
+          fs.writeFile( file, content, function ( error ) {
+            if ( error ) return next( error )
+
+            opts.defaultFile = file;
+            next( null, opts )
+          } )
+        } )
+      } )
+    }
+
+    function touchOrdered () {
+      var fileName = 'ordered';
+      return miss.through.obj( function ( opts, enc, next ) {
+        console.log( 'touch' )
+        var file =  [ opts.folder, fileName ].join( '/' )
+        
+        console.log( file )
+        touch( file, function ( error ) {
+          console.log( error )
+          if ( error ) return next( error )
+
+          opts.defaultFile = file;
+          next( null, opts )
+        } )
+      } )
+    }
+    function sink () {
+      return miss.through.obj( function ( opts, enc, next ) {
+        callback();
+        next();
+      } )
+    }
+  }
+
+  /**
+   * writeDocument.
+   * Optionally log out to process.stdout that the file has been written.
+   * @param  {object}    options
+   * @param  {string}    options.file     The file path to write to
+   * @param  {string}    options.content  The content to write to the file
+   * @param  {boolean}   options.emitter  If true, log out that the document has been written
+   * @return {undefined}
+   */
+  var writeDocument = function ( options ) {
+    if ( !options ) options = {}
+    fs.writeFileSync( options.file, options.content )
+    if ( options.emitter ) console.log( 'build:document-written:' + options.file )
+  }
+
   /**
    * Writes an instance of a template to the build directory
-   * @param  {string}   inFile     Template to read
-   * @param  {string}   outFile    Destination in build directory
-   * @param  {Object}   params     The parameters to pass to the template
+   * 
+   * @param  {string}   inFile          Template to read
+   * @param  {string}   outFile         Destination in build directory
+   * @param  {Object}   params          The parameters to pass to the template
+   * @param  {Object}   params.item     The item data object to pass into the rendering function.
+   * @param  {boolean}  params.emitter  If true, when writing the template, write the path to stdout.
+   *                                    Useful for other processes looking for when files are written.
    */
   var writeTemplate = function(inFile, outFile, params) {
     params = params || {};
@@ -353,7 +553,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
 
     mkdirp.sync(path.dirname(outFile));
-    fs.writeFileSync(outFile, output);
+    // fs.writeFileSync(outFile, output);
+    writeDocument( { file: outFile, content: output, emitter: params.emitter } );
     writeSearchEntry(outFile, output);
 
     // Haha this crazy nonsense is to handle pagination, the swig function "paginate" makes
@@ -386,7 +587,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
       }
 
       mkdirp.sync(path.dirname(outFile));
-      fs.writeFileSync(outFile, output);
+      // fs.writeFileSync(outFile, output);
+      writeDocument( { file: outFile, content: output, emitter: params.emitter } );
       writeSearchEntry(outFile, output);
 
       swigFunctions.increasePage();
@@ -633,29 +835,41 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
   /**
    * Renders all templates in the /pages directory to the build directory
+   * @param  {object}   opts
+   * @param  {number}   opts.concurrency?  Number of CPUs to use when building templats.
+   * @param  {string}   opts.pages?        The page filtering string to use.
+   * @param  {string}   opts.data?         Data object to use. If not supplied, `getData` is run.
+   * @param  {boolean}  opts.emitter?      Boolean to determine if the build process should emit events of progress to process.stdin
+   *                                       If true, other processes can operate on the partially built site.
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.renderPages = function (done, cb)  {
+  this.renderPages = function (opts, done, cb)  {
     logger.ok('Rendering Pages\n');
+
+    var queryFiles = opts.pages || 'pages/**/*';
+    queryFiles = (queryFiles.indexOf('pages') === 0)
+      ? queryFiles
+      : [ 'pages', queryFiles ].join('/');
+
+    if ( opts.data ) setDataFrom( opts.data )
 
     getData(function(data) {
 
-      glob('pages/**/*', function(err, files) {
+      glob( queryFiles , function(err, files) {
         files.forEach(function(file) {
 
           if(fs.lstatSync(file).isDirectory()) {
             return true;
           }
 
-          var forceBuild = false;
           var newFile = file.replace('pages', './.build');
 
           var dir = path.dirname(newFile);
           var filename = path.basename(newFile, path.extname(file));
           var extension = path.extname(file);
 
-          if(extension === '.html' && filename !== 'index' && path.basename(newFile) !== '404.html' && file.indexOf('.raw.html') === -1 && extension !== 'tpl') {
+          if(path.extname(file) === '.html' && filename !== 'index' && path.basename(newFile) !== '404.html' && file.indexOf('.raw.html') === -1) {
             dir = dir + '/' + filename;
             filename = 'index';
           }
@@ -664,25 +878,29 @@ module.exports.generator = function (config, options, logger, fileParser) {
             filename = filename.slice(0, filename.length - 4);
           }
 
-          if(extension === '.tpl') {
-            extension = filename.substr(filename.length - 5, filename.length - 1);
-            filename = filename.slice(0, filename.length - 5);
-            forceBuild = true;
-          }
+          newFile = dir + '/' + filename + path.extname(file);
 
-          newFile = dir + '/' + filename + extension;
-
-          if(forceBuild || extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt') { 
-            writeTemplate(file, newFile);
+          if(extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt') { 
+            writeTemplate(file, newFile, { emitter: opts.emitter });
           } else {
             mkdirp.sync(path.dirname(newFile));
-            fs.writeFileSync(newFile, fs.readFileSync(file));
+            // fs.writeFileSync(newFile, fs.readFileSync(file));
+            writeDocument( {
+              file: newFile,
+              content: fs.readFileSync(file),
+              emitter: opts.emitter,
+            } );
           }
         });
 
         if(fs.existsSync('./libs/.supported.js')) {
           mkdirp.sync('./.build/.wh/_supported');
-          fs.writeFileSync('./.build/.wh/_supported/index.html', fs.readFileSync('./libs/.supported.js'));
+          // fs.writeFileSync('./.build/.wh/_supported/index.html', fs.readFileSync('./libs/.supported.js'));
+          writeDocument( {
+            file: './.build/.wh/_supported/index.html',
+            content: fs.readFileSync('./libs/.supported.js'),
+            emitter: opts.emitter,
+          } );
         }
 
         logger.ok('Finished Rendering Pages\n');
@@ -716,211 +934,308 @@ module.exports.generator = function (config, options, logger, fileParser) {
     return tmpSlug;
   }
 
+
+  /**
+   * Render a single template file.
+   * @param  {object}   opts
+   * @param  {string}   opts.file      The template file to build
+   * @param  {string}   opts.data?     Data object to use. If not supplied, `getData` is run.
+   * @param  {boolean}  opts.emitter?  Boolean to determine if the build process should emit events of progress to process.stdin
+   *                                   If true, other processes can operate on the partially built site.
+   * @param  {Function} done           callback
+   */
+  this.renderTemplate = function (opts, done) {
+
+    opts.file = (opts.file.indexOf('templates/') === 0)
+      ? opts.file
+      : path.join( 'templates', opts.file );
+
+    setDataFrom( opts.data )
+    getData( function ( data, typeInfo ) {
+      if ( opts.emitter ) console.log( 'build-template:start:' + opts.file )
+      processFile( opts.file );
+      if ( opts.emitter ) console.log( 'build-template:end:' + opts.file )
+      done();
+      
+      function processFile ( file ) {
+        // Here we try and abstract out the content type name from directory structure
+        var baseName = path.basename(file, '.html');
+        var newPath = path.dirname(file).replace('templates', './.build').split('/').slice(0,3).join('/');
+
+        var pathParts = path.dirname(file).split('/');
+        var objectName = pathParts[1];
+        var items = data[objectName];
+        var info = typeInfo[objectName];
+        var filePath = path.dirname(file);
+        var overrideFile = null;
+
+        if(!items) {
+          logger.error('Missing data for content type ' + objectName);
+        }
+
+        items = _.map(items, function(value, key) { value._id = key; value._type = objectName; return value });
+
+        if ( opts.itemKey ) items = items.filter( function ( item ) { return item._id === opts.itemKey } )
+
+        var publishedItems = _.filter(items, function(item) {
+          if(!item.publish_date) {
+            return false;
+          }
+
+          var now = Date.now();
+          var pdate = Date.parse(item.publish_date);
+
+          if(pdate > now + (1 * 60 * 1000)) {
+            return false;
+          }
+
+          return true;
+        });
+
+        var baseNewPath = '';
+
+        // Find if this thing has a template control
+        var templateWidgetName = null;
+
+        if(typeInfo[objectName]) {
+          typeInfo[objectName].controls.forEach(function(control) {
+            if(control.controlType === 'layout') {
+              templateWidgetName = control.name;
+            }
+          });
+        }
+
+        var listPath = null;
+
+        if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.listUrl) {
+          var customPathParts = newPath.split('/');
+
+          if(typeInfo[objectName].customUrls.listUrl === '#') // Special remove syntax
+          {
+            listPath = customPathParts.join('/');
+            customPathParts.splice(2, 1);
+          } else {
+            customPathParts[2] = typeInfo[objectName].customUrls.listUrl;
+          }
+
+          newPath = customPathParts.join('/');
+        }
+
+        var origNewPath = newPath;
+
+        // TODO, DETECT IF FILE ALREADY EXISTS, IF IT DOES APPEND A NUMBER TO IT DUMMY
+        if(baseName === 'list')
+        {
+          newPath = newPath + '/index.html';
+
+          if(listPath) {
+            newPath = listPath + '/index.html';
+          }
+
+          writeTemplate(file, newPath, { emitter: opts.emitter });
+
+        } else if (baseName === 'individual') {
+          // Output should be path + id + '/index.html'
+          // Should pass in object as 'item'
+          baseNewPath = newPath;
+          var previewPath = baseNewPath.replace('./.build', './.build/_wh_previews');
+
+          // TODO: Check to make sure file does not exist yet, and then adjust slug if it does? (how to handle in swig functions)
+          for(var key in publishedItems)
+          {
+            var val = publishedItems[key];
+
+            if(templateWidgetName && val[templateWidgetName]) {
+              overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
+            }
+
+            var addSlug = true;
+            if(val.slug) {
+              baseNewPath = './.build/' + val.slug + '/';
+              addSlug = false;
+            } else {
+              if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
+                baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
+              } else {
+                baseNewPath = origNewPath + '/';
+              }                
+            }
+
+            var tmpSlug = '';
+            if(!val.slug) {
+              tmpSlug = generateSlug(val);
+            } else {
+              tmpSlug = val.slug;
+            }
+
+            if(addSlug) {
+              val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
+              newPath = baseNewPath + tmpSlug + '/index.html';
+            } else {
+              newPath = baseNewPath + 'index.html';
+            }
+
+            if(fs.existsSync(overrideFile)) {
+              writeTemplate(overrideFile, newPath, { item: val, emitter: opts.emitter });
+              overrideFile = null;
+            } else {
+              writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
+            }
+          }
+
+          for(var key in items)
+          {
+            var val = items[key];
+
+            if(templateWidgetName && val[templateWidgetName]) {
+              overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
+            }
+
+            newPath = previewPath + '/' + val.preview_url + '/index.html';
+
+            if(fs.existsSync(overrideFile)) {
+              writeTemplate(overrideFile, newPath, { item: val, emitter: opts.emitter });
+              overrideFile = null;
+            } else {
+              writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
+            }
+          }
+        } else if(filePath.indexOf('templates/' + objectName + '/layouts') !== 0) { // Handle sub pages in here
+          baseNewPath = newPath;
+
+          var middlePathName = filePath.replace('templates/' + objectName, '') + '/' + baseName;
+          middlePathName = middlePathName.substring(1);
+
+          for(var key in publishedItems)
+          {
+            var val = publishedItems[key];
+
+            var addSlug = true;
+            if(val.slug) {
+              baseNewPath = './.build/' + val.slug + '/';
+              addSlug = false;
+            } else {
+              if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
+                baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
+              }   else {
+                baseNewPath = origNewPath + '/';
+              }                  
+            }
+
+            var tmpSlug = '';
+            if(!val.slug) {
+              tmpSlug = generateSlug(val);
+            } else {
+              tmpSlug = val.slug;
+            }
+
+            if(addSlug) {
+              val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
+              newPath = baseNewPath + tmpSlug + '/' + middlePathName + '/index.html';
+            } else {
+              newPath = baseNewPath + middlePathName + '/index.html';
+            }
+
+            writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
+          }
+        }
+      }
+
+    } ) 
+  }
+
+
+  function buildInParallel ( concurrency ) {
+    return concurrency > 1
+  }
+
+
   /**
    * Renders all templates in the /templates directory to the build directory
+   * @param  {object}     opts?
+   * @param  {number}     opts?.concurrency?  Number of CPUs to use when building templats.
+   * @param  {string}     opts?.data?         The data object to use 
+   * @param  {string}     opts?.templates?    The template filtering string to pass into renderTemplates
+   * @param  {boolean}    opts?.emitter?      Boolean to determine if the build process should emit events of progress to process.stdin
+   *                                          If true, other processes can operate on the partially built site.
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.renderTemplates = function(done, cb) {
+  this.renderTemplates = function(opts, done, cb) {
     logger.ok('Rendering Templates');
     generatedSlugs = {};
 
+    var queryFiles = opts.templates || 'templates/**/*.html';
+    queryFiles = (queryFiles.indexOf('templates') === 0)
+      ? queryFiles
+      : [ 'templates', queryFiles ].join('/');
+
+    var concurrency = opts.concurrency || 1;
+
+    if ( opts.data ) setDataFrom( opts.data )
+
     getData(function(data, typeInfo) {
 
-      glob('templates/**/*.html', function(err, files) {
+      glob(queryFiles, function(err, files) {
 
-        files.forEach(function(file) {
-          // We ignore partials, special directory to allow making of partial includes
-          if(path.extname(file) === '.html' && file.indexOf('templates/partials') !== 0)
-          {
-            if(path.dirname(file).split('/').length <= 1) {
-              return true;
-            }
-            // Here we try and abstract out the content type name from directory structure
-            var baseName = path.basename(file, '.html');
-            var newPath = path.dirname(file).replace('templates', './.build').split('/').slice(0,3).join('/');
+        if ( err ) logger.error(err.message)
 
-            var pathParts = path.dirname(file).split('/');
-            var objectName = pathParts[1];
-            var items = data[objectName];
-            var info = typeInfo[objectName];
-            var filePath = path.dirname(file);
-            var overrideFile = null;
+        var filesToBuild = files
+          .filter(onlyHtmlFiles)
+          .filter(notAPartial)
+          .filter(isFilePath);
 
-            if(!items) {
-              logger.error('Missing data for content type ' + objectName);
-            }
+        if ( filesToBuild.length === 0 ) return cb(done);
 
-            items = _.map(items, function(value, key) { value._id = key; value._type = objectName; return value });
+        var buildTasks;
+        if ( buildInParallel( concurrency ) )
+          buildTasks = filesToBuild.map(fileToParallelBuildTask);
+        else
+          buildTasks = filesToBuild.map(fileToBuildTask);
 
-            var publishedItems = _.filter(items, function(item) {
-              if(!item.publish_date) {
-                return false;
-              }
+        async.parallelLimit( buildTasks, concurrency,
+          function buildComplete ( error, results ) {
+            if ( error ) // TODO: requeue on error
 
-              var now = Date.now();
-              var pdate = Date.parse(item.publish_date);
+            logger.ok('Finished Rendering Templates');
 
-              if(pdate > now + (1 * 60 * 1000)) {
-                return false;
-              }
+            if(cb) cb(done);
+          } )
 
-              return true;
-            });
+        function onlyHtmlFiles (file) {
+          return (path.extname(file) === '.html');
+        }
 
-            var baseNewPath = '';
+        function notAPartial (file) {
+          return (file.indexOf('templates/partials') !== 0);
+        }
 
-            // Find if this thing has a template control
-            var templateWidgetName = null;
+        function isFilePath (file) {
+          return (path.dirname(file).split('/').length > 1);
+        }
 
-            if(typeInfo[objectName]) {
-              typeInfo[objectName].controls.forEach(function(control) {
-                if(control.controlType === 'layout') {
-                  templateWidgetName = control.name;
-                }
-              });
-            }
-
-            var listPath = null;
-
-            if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.listUrl) {
-              var customPathParts = newPath.split('/');
-
-              if(typeInfo[objectName].customUrls.listUrl === '#') // Special remove syntax
-              {
-                listPath = customPathParts.join('/');
-                customPathParts.splice(2, 1);
-              } else {
-                customPathParts[2] = typeInfo[objectName].customUrls.listUrl;
-              }
-
-              newPath = customPathParts.join('/');
-            }
-
-            var origNewPath = newPath;
-
-            // TODO, DETECT IF FILE ALREADY EXISTS, IF IT DOES APPEND A NUMBER TO IT DUMMY
-            if(baseName === 'list')
-            {
-              newPath = newPath + '/index.html';
-
-              if(listPath) {
-                newPath = listPath + '/index.html';
-              }
-
-              writeTemplate(file, newPath);
-
-            } else if (baseName === 'individual') {
-              // Output should be path + id + '/index.html'
-              // Should pass in object as 'item'
-              baseNewPath = newPath;
-              var previewPath = baseNewPath.replace('./.build', './.build/_wh_previews');
-
-              // TODO: Check to make sure file does not exist yet, and then adjust slug if it does? (how to handle in swig functions)
-              for(var key in publishedItems)
-              {
-                var val = publishedItems[key];
-
-                if(templateWidgetName && val[templateWidgetName]) {
-                  overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
-                }
-
-                var addSlug = true;
-                if(val.slug) {
-                  baseNewPath = './.build/' + val.slug + '/';
-                  addSlug = false;
-                } else {
-                  if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
-                    baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
-                  } else {
-                    baseNewPath = origNewPath + '/';
-                  }                
-                }
-
-                var tmpSlug = '';
-                if(!val.slug) {
-                  tmpSlug = generateSlug(val);
-                } else {
-                  tmpSlug = val.slug;
-                }
-
-                if(addSlug) {
-                  val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
-                  newPath = baseNewPath + tmpSlug + '/index.html';
-                } else {
-                  newPath = baseNewPath + 'index.html';
-                }
-
-                if(fs.existsSync(overrideFile)) {
-                  writeTemplate(overrideFile, newPath, { item: val });
-                  overrideFile = null;
-                } else {
-                  writeTemplate(file, newPath, { item: val });
-                }
-              }
-
-              for(var key in items)
-              {
-                var val = items[key];
-
-                if(templateWidgetName && val[templateWidgetName]) {
-                  overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
-                }
-
-                newPath = previewPath + '/' + val.preview_url + '/index.html';
-
-                if(fs.existsSync(overrideFile)) {
-                  writeTemplate(overrideFile, newPath, { item: val });
-                  overrideFile = null;
-                } else {
-                  writeTemplate(file, newPath, { item: val });
-                }
-              }
-            } else if(filePath.indexOf('templates/' + objectName + '/layouts') !== 0) { // Handle sub pages in here
-              baseNewPath = newPath;
-
-              var middlePathName = filePath.replace('templates/' + objectName, '') + '/' + baseName;
-              middlePathName = middlePathName.substring(1);
-
-              for(var key in publishedItems)
-              {
-                var val = publishedItems[key];
-
-                var addSlug = true;
-                if(val.slug) {
-                  baseNewPath = './.build/' + val.slug + '/';
-                  addSlug = false;
-                } else {
-                  if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
-                    baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
-                  }   else {
-                    baseNewPath = origNewPath + '/';
-                  }                  
-                }
-
-                var tmpSlug = '';
-                if(!val.slug) {
-                  tmpSlug = generateSlug(val);
-                } else {
-                  tmpSlug = val.slug;
-                }
-
-                if(addSlug) {
-                  val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
-                  newPath = baseNewPath + tmpSlug + '/' + middlePathName + '/index.html';
-                } else {
-                  newPath = baseNewPath + middlePathName + '/index.html';
-                }
-
-                writeTemplate(file, newPath, { item: val });
-              }
-            }
+        function fileToParallelBuildTask ( file ) {
+          var args = [ 'run', 'build-template', '--' ];
+          args = args.concat( [ '--inFile=' + file ] )
+          args = args.concat( [ '--data=' + DATA_CACHE_PATH ] )
+          if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
+          var pipe = opts.emitter ? false : true; // write to child thread?
+          return function parallelBuildTask ( step ) {
+            runCommand(options.npm || 'npm', '.', args, pipe, function onEnd () {
+              step();
+            })
           }
-        });
+        }
 
-        logger.ok('Finished Rendering Templates');
-
-        if(cb) cb(done);
+        function fileToBuildTask ( file ) {
+          return function buildTask ( step ) {
+            self.renderTemplate(
+              { file: file, data: data, emitter: opts.emitter },
+              function onComplete () {
+                step();
+              } )
+          }
+        }
 
       });
     });
@@ -928,13 +1243,25 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
   /**
    * Copies the static directory into .build/static for asset generation
-   * @param  {Function}   callback     Callback called after creation of directory is done
+   * @param  {boolean}  opts 
+   * @param  {boolean}  opts.emitter?      Boolean to determine if the build process should emit events of progress to process.stdin
+   *                                        If true, other processes can operate on the partially built site.
+   * @param  {Function} callback     Callback called after creation of directory is done
    */
-  this.copyStatic = function(callback) {
+  this.copyStatic = function(opts, callback) {
     logger.ok('Copying static');
-    if(fs.existsSync('static')) {
-      mkdirp.sync('.build/static');
-      wrench.copyDirSyncRecursive('static', '.build/static', { forceDelete: true });
+    var baseDirectory = 'static';
+    if(fs.existsSync(baseDirectory)) {
+      var staticDirectory = path.join( '.build', baseDirectory )
+      mkdirp.sync( staticDirectory );
+      wrench.copyDirSyncRecursive(baseDirectory, staticDirectory, { forceDelete: true });
+      if ( opts.emitter ) {
+        var buildStaticFiles = wrench.readdirSyncRecursive( staticDirectory ) 
+        buildStaticFiles.forEach( function ( builtFile ) {
+          var builtFilePath = path.join( staticDirectory, builtFile );
+          console.log( 'build:document-written:./' + builtFilePath )
+        } )
+      }
     }
     callback();
   };
@@ -1012,47 +1339,182 @@ module.exports.generator = function (config, options, logger, fileParser) {
       createStaticHashs();
 
       removeDirectory('.build/static', function() {
-        self.copyStatic(function() {
+        var copyStaticOptions = {
+          emitter: task.emitter
+        }
+        self.copyStatic(copyStaticOptions, function() {
           self.reloadFiles(callback);
         });
       });
     } else {
-      self.realBuildBoth(function() {
+      var buildBothOptions = {
+        concurrency: task.concurrency,
+        emitter: task.emitter,
+        data: task.data,
+        pages: task.pages,
+        templates: task.templates,
+      }
+      self.realBuildBoth( buildBothOptions, function() {
         callback();
       }, self.reloadFiles);
     }
   }, 1);
 
-  this.buildBoth = function(done) {
-    buildQueue.push({ type: 'all' }, function(err) {
+  this.buildBoth = function(opts, done) {
+    var task = {
+      type: 'all',
+      concurrency: opts.concurrency,
+      emitter: opts.emitter,
+      data: opts.data,
+      pages: opts.pages,
+      templates: opts.templates,
+    }
+    buildQueue.push( task, function(err) {
       done();
     });
   };
 
-  this.buildStatic = function(done) {
-    buildQueue.push({ type: 'static' }, function(err) {
+  var readData = function ( readFrom ) {
+    if ( typeof readFrom === 'object'  ) return readFrom;
+
+    var read = false; // default value
+    if ( typeof readFrom === 'undefined' ) return read;
+
+    try { // reading from stringified json?
+        read = JSON.parse(readFrom)
+      } catch (e) { 
+        // not json
+        try { // reading from json file?
+          read = JSON.parse(
+            fs.readFileSync( readFrom )
+              .toString())
+        } catch (e) {
+          console.error( e.message );
+        }
+      }
+
+    return read;
+  }
+
+  /**
+   * Write data to the path
+   * @param  {object}  options
+   * @param  {string}  options.file  The file to write to
+   * @param  {object}  options.data  The data to write to file
+   * @return {string}  file          The file written to
+   */
+  var writeDataCache = function ( options ) {
+    if ( !options ) options = {}
+    
+    mkdirp.sync( path.dirname( options.file ) );
+
+    if ( typeof options.data === 'function') var data = options.data();
+    if ( typeof options.data === 'object' )  var data = JSON.stringify( options.data );
+
+    fs.writeFileSync( options.file, data )
+    return options.file;
+  }
+
+  /**
+   * If a data object is passed in, it is set as the
+   * `self.cachedData` & `data` objects that get used
+   * throughout the generator.
+   * 
+   * @param {object} optionalData Webhook CMS data object
+   */
+  function setDataFrom ( optionalData ) {
+    var data = readData( optionalData )
+    if ( ( typeof data === 'object' ) &&
+         data.hasOwnProperty( 'data' ) &&
+         ( data.hasOwnProperty( 'contentType' ) ||
+           data.hasOwnProperty( 'typeInfo' ) ) &&
+         data.hasOwnProperty( 'settings' ) ) {
+
+      if ( data.hasOwnProperty( 'contentType' ) ) {
+        data.typeInfo = data.contentType;
+        delete data.contentType; 
+      }
+      
+      self.cachedData = data;
+      return true;
+    }
+    else return false;
+  }
+
+  /**
+   * Render a single page
+   * @param  {object}   opts
+   * @param  {string}   opts.inFile
+   * @param  {string}   opts.outFile?
+   * @param  {object}   opts.data?
+   * @param  {boolean}  opts.emitter?
+   * @param  {Function} done    callback when done
+   */
+  this.renderPage = function (opts, done) {
+    opts.inFile = (opts.inFile.indexOf('pages/') === 0)
+      ? opts.inFile
+      : [ 'pages', opts.inFile ].join('/');
+
+    if ( ! opts.outFile ) opts.outFile = opts.inFile.replace('pages/', './.build/')
+
+    if ( opts.data ) setDataFrom( opts.data )
+
+    getData(function ( data ) {
+      if ( opts.emitter ) console.log( 'build-page:start:' + opts.inFile )
+      writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } );
+      if ( opts.emitter ) console.log( 'build-page:end:' + opts.inFile )
+      done();
+    })
+  }
+
+  /**
+   * Build static task.
+   * @param  {boolean}  opts 
+   * @param  {boolean}  opts.emitter?  Boolean to determine if the build process should emit events of progress to process.stdin
+   *                                   If true, other processes can operate on the partially built site.
+   * @param  {Function} done Task done callback.
+   */
+  this.buildStatic = function(opts, done) {
+    var task = { type: 'static' };
+
+    buildQueue.push(Object.assign( task, opts ), function(err) {
       done();
     });
   };
 
   /**
    * Builds templates from both /pages and /templates to the build directory
+   * @param  {object}     opts
+   * @param  {number}     opts.concurrency  Number of CPUs to use for build tasks
+   * @param  {object}     opts.data?        Webhook CMS data for the site
+   * @param  {string}     opts.templates?   The template filtering string to pass into renderTemplates
+   * @param  {string}     opts.pages?       The page filtering string to pass into renderTemplates
+   * @param  {boolean}    opts.emitter?     Boolean to determine if the build process should emit events of progress to process.stdin
+   *                                        If true, other processes can operate on the partially built site.
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.realBuildBoth = function(done, cb) {
+  this.realBuildBoth = function(opts, done, cb) {
     // clean files
     self.cachedData = null;
     self.cleanFiles(null, function() {
       self.openSearchEntryStream(function() {
-        self.renderTemplates(null, function() {
-          self.copyStatic(function() {
-            self.renderPages(function() {}, function() {
-              self.closeSearchEntryStream(function() {
-                cb(done);
+        setDataFrom( opts.data )
+        getData(function ( data ) {
+
+          if ( buildInParallel( opts.concurrency ) )
+            writeDataCache( { file: DATA_CACHE_PATH, data: self.cachedData } )
+
+          self.renderTemplates(opts, null, function() {
+            self.copyStatic(opts, function() {
+              self.renderPages(opts, function() {}, function() {
+                self.closeSearchEntryStream(function() {
+                  cb(done);
+                });
               });
             });
           });
+
         });
       })
     });
@@ -1437,7 +1899,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     var confFile = fs.readFileSync('./libs/.firebase.conf.jst');
 
-    if(firebase || server) {
+    if(firebase) {
       confFile = fs.readFileSync('./libs/.firebase-custom.conf.jst');
     }
 
@@ -1613,7 +2075,6 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
   this.enableProduction = function() {
     productionFlag = true;
-    swig.setDefaults({ cache: 'memory' });
   }
 
   return this;
