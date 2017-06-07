@@ -335,7 +335,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
   };
 
   function defaultBuildOrder ( callback ) {
-    var includeExtensions = filterExtensions([ '.html', '.xml', '.swig' ])
+    var excludeExtensions = filterExtensions([ '' ])
 
     var opts = { files: [] };
     
@@ -356,7 +356,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
           if ( Array.isArray( templateFiles ) ) {
             var includeTemplateFiles = templateFiles
               .filter(removePartials)
-              .filter(includeExtensions)
+              .filter(excludeExtensions)
               .sort()
               .map(prefixFile('templates'))
 
@@ -374,7 +374,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
           if ( Array.isArray( pageFiles ) ) {
             var includePageFiles = pageFiles
-              .filter(includeExtensions)
+              .filter(excludeExtensions)
               .sort()
               .map(prefixFile('pages'))
 
@@ -397,7 +397,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
     function filterExtensions ( extensions ) {
       return function filterer ( file ) {
-        return extensions.filter( function ( extension ) { return file.endsWith( extension ) } ).length === 1;
+        return extensions.filter( function ( extension ) { return path.extname( file ) === extension } ).length === 0;
       }
     }
     function prefixFile ( prefix ) {
@@ -1461,7 +1461,18 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     getData(function ( data ) {
       if ( opts.emitter ) console.log( 'build-page:start:' + opts.inFile )
-      writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } );
+      var extension = path.extname( opts.inFile );
+      if( extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' ) {
+        writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } );  
+      } else {
+        mkdirp.sync( path.dirname( opts.outFile ) );
+        writeDocument( {
+          file: opts.outFile,
+          content: fs.readFileSync( opts.inFile ),
+          emitter: opts.emitter,
+        } );
+      }
+      
       if ( opts.emitter ) console.log( 'build-page:end:' + opts.inFile )
       done();
     })
