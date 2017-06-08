@@ -102,6 +102,19 @@ module.exports = function(grunt) {
     generator.renderPage(options, done);
   });
 
+  grunt.registerTask('build-page-cms', 'Build just the CMS page.', function () {
+    var done = this.async();
+
+    var options = {
+      inFile:  'pages/cms.html',
+      outFile: '.build/cms/index.html',
+      data: grunt.option('data') || undefined,
+      emitter: grunt.option('emitter') || undefined,
+    }
+
+    generator.renderPage(options, done);
+  })
+
   // Build individual template
   grunt.registerTask('build-template', 'Build a single template file.', function () {
     var done = this.async();
@@ -250,7 +263,11 @@ module.exports = function(grunt) {
   grunt.registerTask('default',  'Clean, Build, Start Local Server, and Watch', function() {
     grunt.task.run('configureProxies:wh-server')
     grunt.task.run('connect:wh-server');
-    grunt.task.run('build');
+    if ( grunt.option( 'skipBuild' ) ) {
+      grunt.task.run('build-page-cms')
+    } else {
+      grunt.task.run('build');  
+    }
     grunt.task.run('concurrent:wh-concurrent');
   });
 
