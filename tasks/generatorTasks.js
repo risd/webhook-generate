@@ -92,6 +92,13 @@ module.exports = function(grunt) {
   // Build individual page
   grunt.registerTask('build-page', 'Build a single template file.', function (){
     var done = this.async();
+
+    var production = grunt.option('production');
+
+    if(production === true) {
+      generator.enableProduction();
+    }
+    
     var options = {
       inFile:  grunt.option('inFile'),
       outFile: grunt.option('outFile') || undefined,
@@ -104,6 +111,12 @@ module.exports = function(grunt) {
 
   grunt.registerTask('build-page-cms', 'Build just the CMS page.', function () {
     var done = this.async();
+
+    var production = grunt.option('production');
+
+    if(production === true) {
+      generator.enableProduction();
+    }
 
     var options = {
       inFile:  'pages/cms.html',
@@ -118,6 +131,13 @@ module.exports = function(grunt) {
   // Build individual template
   grunt.registerTask('build-template', 'Build a single template file.', function () {
     var done = this.async();
+
+    var production = grunt.option('production');
+
+    if(production === true) {
+      generator.enableProduction();
+    }
+
     var options = {
       file: grunt.option('inFile'),
       emitter: grunt.option('emitter') || false,
