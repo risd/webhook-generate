@@ -1,9 +1,11 @@
 {% set site_url = getSetting( 'site_url' ) %}
+{% set site_map = getSetting( 'site_map' ) %}
 {% if site_url.indexOf( 'risd.systems' ) === -1 %}
 {# Is not a risd.systems site. #}
 User-agent: *
 Disallow: /_wh_previews/
 Disallow: /cms/
+Sitemap: {{ site_map }}
 {% else %}
 {# Is a risd.systems site. #}
 User-Agent: *
