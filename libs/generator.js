@@ -502,6 +502,13 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if ( options.emitter ) console.log( 'build:document-written:' + options.file )
   }
 
+  var doNoPublishPageTemplate = swig.renderFile( './libs/do-not-publish-page.html' ).trim()
+  var doNotPublishPage = function ( template ) {
+    return ( template.indexOf( doNoPublishPageTemplate ) !== -1 )
+      ? true
+      : false;
+  }
+
   /**
    * Writes an instance of a template to the build directory
    * 
@@ -551,6 +558,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
         }
       }
     }
+
+    if ( doNotPublishPage( output ) ) return;
 
     mkdirp.sync(path.dirname(outFile));
     // fs.writeFileSync(outFile, output);
