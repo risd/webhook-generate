@@ -14,7 +14,7 @@
   "scripts": {
     "start": "rm-wh serve",
     "build": "grunt build",
-    "deploy": "rm-wh deploy --branch=master",
+    "deploy": "rm-wh deploy",
     "build-page": "grunt build-page",
     "build-pages": "grunt build-pages",
     "build-template": "grunt build-template"
