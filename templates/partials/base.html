@@ -43,13 +43,13 @@
     <script src="//cdnjs.cloudflare.com/ajax/libs/modernizr/2.7.1/modernizr.min.js"></script>
 
     <!-- Global Site Tag (gtag.js) - Google Analytics -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id={{ site_analytics }}"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ getSetting('analytics_id') }}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments)};
       gtag('js', new Date());
 
-      gtag('config', '{{ site_analytics }}');
+      gtag('config', '{{ getSetting('analytics_id') }}');
     </script>
 
 
