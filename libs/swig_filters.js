@@ -114,9 +114,9 @@ module.exports.init = function (swig) {
     if(width === 'auto' && height === 'auto') {
       return image.resize_url;
     } else if(width === 'auto' && height) {
-      source += '=h' + height;
+      source += '=w0-h' + height;
     } else if(width && height === 'auto') {
-      source += '=w' + width;
+      source += '=w' + width + '-h0';
     } else if(width && height) {
       source += '=w' + width + '-h' +height;
     } else if(width && !height) {
@@ -132,38 +132,7 @@ module.exports.init = function (swig) {
     }
 
     return source;
-  };
-
-  var justinImageSize = function(image, width, height, crop) {
-
-    var source = image.resize_url,
-        parts = source.split('.'),
-        ext = parts.length > 1 ? ('.' + parts.pop()) : '';
-
-    source = parts.join('.');
-
-    if(width === 'auto' && height === 'auto') {
-      return source + '-0x0' + ext;
-    } else if(width === 'auto' && height) {
-      source += '-0x' + height;
-    } else if(width && height === 'auto') {
-      source += '-' + width + 'x0';
-    } else if(width && height) {
-      source += '-' + width + 'x' + height;
-    } else if(width && !height) {
-      source += '-' + width + 'x' + width;
-    }
-
-    if(crop) {
-      source += '-c';
-    } else {
-      source += '-a';
-    }
-
-    source += ext;
-
-    return source;
-  };
+  }
 
   var imageSize = function(input, size, deprecatedHeight, deprecatedGrow) {
 
@@ -183,11 +152,8 @@ module.exports.init = function (swig) {
         return input.url;
       }
 
-      if (input.resize_url.indexOf('http://static-cdn.jtvnw.net') === 0) {
-        return justinImageSize(input, size, deprecatedHeight);
-      }
-
       return googleImageSize(input, size, deprecatedHeight);
+
     } else if (typeof input === 'string') {
       console.log('The imageSize filter only supports image objects and not raw urls.'.red);
 
@@ -234,10 +200,6 @@ module.exports.init = function (swig) {
 
       if(!size) {
         return input.url;
-      }
-
-      if (input.resize_url.indexOf('http://static-cdn.jtvnw.net') === 0) {
-        return justinImageSize(input, size, deprecatedHeight, true);
       }
 
       return googleImageSize(input, size, deprecatedHeight, true);      
@@ -303,6 +265,61 @@ module.exports.init = function (swig) {
 
   this.setFirebaseConf = function(conf) {
     firebaseConf = conf;
+  }
+
+  /**
+   * Object that represnts user defined filters.
+   * The key for each entry is the name of the filter,
+   * the value is the filter function to run when the
+   * filter is invoked.
+   * @type {Object}
+   */
+  var _user_filters = {};
+
+  /**
+   * Getter/Setter for _user_filters.
+   * If an object is passed in, it will define the
+   * _user_filters object.
+   * If an array is passed in, it is expected to be of
+   * strings that will resolve modules that define the
+   * objects used to make up the _user_filters.
+   * If the function is called with no arguments, the currently
+   * defined _user_filters are returned.
+   * 
+   * @param  {string[]|object|string} setUserFilters Objects or strings to require into objects.
+   * @return {object}  The current context if setting, or the objects set if getting.
+   */
+  this.userFilters = function getSetUserFilters ( setUserFilters ) {
+    if ( ! arguments.length ) return _user_filters;
+
+    if ( Array.isArray( setUserFilters ) ) {
+      setUserFilters.forEach( resolveFilter )
+    }
+    else if ( typeof setUserFilters === 'object' ) {
+      _user_filters = setUserFilters
+    }
+    else if ( typeof setUserFilters === 'string' ) {
+      resolveFilter( setUserFilters )
+    }
+    else {
+      throw new Error( 'Expects input to be an array of strings that represent a file path, object or file path string.' )
+    }
+
+    Object.keys( _user_filters ).forEach( addFilterTo( swig ) )
+
+    return this;
+
+    function resolveFilter ( filterPath ) {
+      var toResolve = './../' + filterPath;
+      Object.assign( _user_filters, require( toResolve ) )
+    }
+
+    function addFilterTo ( swig ) {
+      return function keyInFilters ( filterName ) {
+        var filterFunction = _user_filters[ filterName ]
+        swig.setFilter( filterName, filterFunction )
+      }
+    }
   }
 
   var date = function(input, format, offset, abbr) {
@@ -411,54 +428,6 @@ module.exports.init = function (swig) {
         })
       }
     });
-    return filtered;
-  }
-
-  var relationshipHas = function(input, relationshipName, property) {
-    var filtered = [];
-    var args =  [].slice.apply(arguments);
-    var filters = args.slice(3);
-
-    input.forEach(function(item) {
-      var relationship = item[relationshipName];
-
-      if (relationship) {
-        if(Array.isArray(relationship)) {
-          var include = false;
-
-          relationship.forEach(function(subItem) {
-            if(filters.length === 0 && subItem && subItem[property]) {
-              include = true;
-            }
-
-            if(filters.length > 0) {
-              filters.forEach(function(filter) {
-                if(subItem && subItem[property] === filter) {
-                  include = true;
-                }
-              })
-            }
-          });
-
-          if(include) {
-            filtered.push(item);
-          }
-        } else {
-          if(filters.length === 0 && relationship && relationship[property]) {
-            filtered.push(item);
-          }
-
-          if(filters.length > 0) {
-            filters.forEach(function(filter) {
-              if(subItem && subItem[property] === filter) {
-                filtered.push(item);
-              }
-            })
-          }
-        }
-      }
-    })
-
     return filtered;
   }
 
@@ -610,10 +579,17 @@ module.exports.init = function (swig) {
     return result;
   }
 
+  var debug = function ( input ) {
+    console.log( input );
+    return '';
+  }
+
   markdown.safe = true;
   linebreaks.safe = true;
   jsonP.safe = true;
   json.safe = true;
+
+  var timeComparators = utils.timeComparators();
 
   swig.setFilter('upper', upper);
   swig.setFilter('slice', slice);
@@ -629,7 +605,6 @@ module.exports.init = function (swig) {
   swig.setFilter('markdown', markdown);
   swig.setFilter('date', date);
   swig.setFilter('where', where);
-  swig.setFilter('relationshipHas', relationshipHas);
   swig.setFilter('exclude', exclude);
   swig.setFilter('duration', duration);
   swig.setFilter('abs', abs);
@@ -637,5 +612,13 @@ module.exports.init = function (swig) {
   swig.setFilter('pluralize', pluralize);
   swig.setFilter('jsonp', jsonP);
   swig.setFilter('json', json);
-  swig.setFilter('imgAltClass',imgAltClass);
+  swig.setFilter('imgAltClass', imgAltClass);
+  swig.setFilter('debug', debug);
+  swig.setFilter('isSameDay', timeComparators.isToday);
+  swig.setFilter('isBefore', timeComparators.isBefore);
+  swig.setFilter('isBeforeDay', timeComparators.isBeforeStartOfDay);
+  swig.setFilter('isAfter', timeComparators.isAfter);
+  swig.setFilter('isAfterDay', timeComparators.isAfterEndOfDay);
+  swig.setFilter('isBetween', timeComparators.isBetween)
+  swig.setFilter('isBetweenDay', timeComparators.isBetweenDay)
 };

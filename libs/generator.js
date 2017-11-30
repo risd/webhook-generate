@@ -25,10 +25,8 @@ var exec = require('child_process').exec;
 require('colors');
 
 // Template requires
-// TODO: Abstract these later to make it simpler to change
 var swig = require('swig');
 swig.setDefaults({ loader: swig.loaders.fs(__dirname + '/..') });
-
 var swigFunctions = require('./swig_functions').swigFunctions();
 var swigFilters = require('./swig_filters');
 var swigTags = require('./swig_tags');
@@ -77,7 +75,7 @@ Function = wrap;
 
 var cmsSocketPort = 6557;
 var BUILD_DIRECTORY = '.build';
-var DATA_CACHE_PATH = [ BUILD_DIRECTORY, 'data.json' ].join('/');
+var DATA_CACHE_PATH = path.join( BUILD_DIRECTORY, 'data.json' )
 
 /**
  * Generator that handles various commands
@@ -114,6 +112,23 @@ module.exports.generator = function (config, options, logger, fileParser) {
   } else {
     this.root = null;
   }
+
+  var userSwigConfig = config.get('swig');
+  if ( userSwigConfig ) {
+    // functions
+    if ( userSwigConfig.functions ) {
+      swigFunctions.userFunctions( userSwigConfig.functions )
+    }
+    // filters
+    if ( userSwigConfig.filters ) {
+      swigFilters.userFilters( userSwigConfig.filters )
+    }
+    // tags
+    if ( userSwigConfig.tags ) {
+      swigTags.userTags( userSwigConfig.tags )
+    }
+  }
+  
 
   /**
    * Used to get the bucket were using (combinaton of config and environment)

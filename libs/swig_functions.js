@@ -1,5 +1,6 @@
 'use strict';
 
+var moment = require('moment');
 var utils = require('./utils.js');
 var _ = require('lodash');
 
@@ -37,7 +38,7 @@ module.exports.swigFunctions = function(swig) {
 
       object = _.find(types, function(type){ return type.name.toLowerCase() == object.toLowerCase() || type.id.toLowerCase() == object.toLowerCase() });
     }
-  
+
     if(!object) {
       return '';
     }
@@ -109,6 +110,24 @@ module.exports.swigFunctions = function(swig) {
     return types;
   };
 
+
+
+  /**
+   * Decorator function. Accepts a function as an arguement
+   * (fn), returns a functor that when called, logs its
+   * arguments, and then calls the fn with the arguments
+   * @param  {string} prefix [description]
+   * @param  {Function} fn [description]
+   * @return {[type]}      [description]
+   */
+  var logarguments = function (type, fn) {
+    return function () {
+      console.log(JSON.stringify(
+        { type: type, data: arguments }))
+      return fn.apply(null, arguments);
+    }
+  }
+
   /**
    * Returns a published item based off its type and id or a relation string from the CMS
    * @param    {String} Can either be a relation string (from the CMS) or a type name
@@ -136,7 +155,7 @@ module.exports.swigFunctions = function(swig) {
       type = parts[0];
       key = parts[1];
     }
-    
+
     if(!self.typeInfo[type]) {
       return {};
     }
@@ -211,6 +230,7 @@ module.exports.swigFunctions = function(swig) {
 
     return item;
   };
+
 
   /**
    * Returns an array of items from a relation
@@ -392,11 +412,11 @@ module.exports.swigFunctions = function(swig) {
 
       var no = 1;
       // convert it into an array
-      tempData = _.map(tempData, function(value, key) { 
+      tempData = _.map(tempData, function(value, key) {
         var tmpSlug = "";
 
-        value._id = key; 
-        value._type = name; 
+        value._id = key;
+        value._type = name;
 
         if(value.name)  {
           if(!value.slug) {
@@ -425,7 +445,7 @@ module.exports.swigFunctions = function(swig) {
 
         return value;
       });
-      tempData = _.filter(tempData, function(item) { 
+      tempData = _.filter(tempData, function(item) {
         if(!includeAll && !item.publish_date) {
           return false;
         }
@@ -443,7 +463,7 @@ module.exports.swigFunctions = function(swig) {
       data = data.concat(tempData);
     });
 
-    
+
     self.cachedData[names.join(',') + ',' + includeAll] = data;
 
     return data;
@@ -521,7 +541,7 @@ module.exports.swigFunctions = function(swig) {
     if(reverse) {
       return _.sortBy(input, property).reverse();
     }
-    
+
     return _.sortBy(input, property)
   };
 
@@ -601,12 +621,90 @@ module.exports.swigFunctions = function(swig) {
   this.increasePage = function() {
     self.curPage = self.curPage + 1;
   };
-  
+
   this.setParams = function(params) {
     for(var key in params) {
       self[key] = params[key];
     }
   };
+
+  var setIf = function ( ifTrueValue, item, key, value ) {
+    if ( item[key] === value ) return ifTrueValue;
+    else return item;
+  }
+
+  var dropdownOptions = function (contentTypeName, controlName, filterEmptyStrings) {
+    var options = [];
+
+    if (typeof filterEmptyStrings !== 'boolean') {
+      filterEmptyStrings = false;
+    }
+
+    var types = getTypes().filter(function (contentType) {
+      return contentType.id === contentTypeName;
+    });
+
+    if (types.length === 1) {
+      var contentType = types[0];
+      var contentControls = contentType.typeInfo.controls.filter(function (control) {
+        return control.name === controlName;
+      });
+      if (contentControls.length === 1) {
+        options = contentControls[0].meta.options.map(function (option) {
+          return option.value;
+        });
+        if (filterEmptyStrings) {
+          options = options.filter(function (optionValue) {
+            return optionValue.length > 0;
+          });
+        }
+      }
+    }
+
+    return options;
+  }
+
+  
+  /**
+   * Keys of this object are names of user defined functions,
+   * with the Values being the functions that will be called
+   * from within the swig template.
+   * These are defined in the function below, `getSetUserFunctions`
+   * @type {Object}
+   */
+  var _user_functions = {};
+  
+  /**
+   * Expects an array of strings that represent modules that can be
+   * required in and used to extend the core swig functions defined
+   * in this module.
+   * 
+   * @param  {string[]|object|string} setUserFunctions Objects or strings to require into objects.
+   * @return {object|object}  The current context if setting, or the objects set if getting.
+   */
+  this.userFunctions = function getSetUserFunctions ( setUserFunctions ) {
+    if ( ! arguments.length ) return _user_functions;
+
+    if ( Array.isArray( setUserFunctions ) ) {
+      setUserFunctions.forEach( resolveFunction )
+    }
+    else if ( typeof setUserFunctions === 'object' ) {
+      _user_functions = setUserFunctions;  
+    }
+    else if ( typeof setUserFunctions === 'string' ) {
+      resolveFunction( setUserFunctions )
+    }
+    else {
+      throw new Error( 'Expects input to be an array of strings that represent a file path, object or file path string.' )
+    }
+    
+    return this;
+
+    function resolveFunction ( userFunction ) {
+      var toResolve = './../' + userFunction;
+      Object.assign( _user_functions, require( toResolve ) )
+    }
+  }
 
   this.getFunctions = function() {
     var functions = {
@@ -636,7 +734,10 @@ module.exports.swigFunctions = function(swig) {
       cmsVersion: 'v2',
       merge: merge,
       nextItem: nextItem,
-      prevItem: prevItem
+      prevItem: prevItem,
+      setIf: setIf,
+      dropdownOptions: dropdownOptions,
+      build: utils.timeComparators(),
     };
 
     var types = [];
@@ -664,7 +765,7 @@ module.exports.swigFunctions = function(swig) {
       configurable: true
     })
 
-    return functions;
+    return Object.assign( {}, _user_functions, functions );
   };
 
 

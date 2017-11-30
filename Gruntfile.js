@@ -112,6 +112,21 @@ module.exports = function(grunt) {
       }
     },
 
+    /**
+     * Extending Swig
+     * The following gives the user the ability to extend
+     * the swig implementation being used to build the site.
+     * Each should contain an array of files that can be passed
+     * into the `glob` module to query files from the local
+     * project, to extend the tags, filters, or functions
+     * available the swig instance used to compile templates.
+     */
+    swig: {
+      tags: [],
+      filters: [],
+      functions: [],
+    }
+
   });
 
   grunt.loadNpmTasks('grunt-contrib-concat');
