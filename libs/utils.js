@@ -1,7 +1,7 @@
 'use strict';
 
 var _ = require('lodash');
-var moment = require('moment');
+var moment = require('moment-timezone');
 
 /**
  * Extends source dictionaries into the target dictionary
@@ -118,4 +118,66 @@ module.exports.parseCustomUrl = function(url, object) {
   url = url.replace(/#(\w)/g, replacer);
 
   return url;
+}
+
+
+
+
+module.exports.timeComparators = function timeComparators () {
+  var buildTime = moment().tz('America/New_York');
+
+  var compareArgs = function (base_date_string, compare_date_string) {
+    if (compare_date_string) {
+      var base = moment(base_date_string)
+      var compare = moment(compare_date_string)
+    } else {
+      var base = buildTime.clone()
+      var compare = moment(base_date_string)
+    }
+    return { base: base, compare: compare }
+  }
+
+  return {
+    time: buildTime.format(),
+    isToday: function (base_date_string, compare_date_string) {
+      var args = compareArgs(base_date_string, compare_date_string)
+      return args.base.isSame(args.compare, 'day')
+    },
+    isBefore: function (base_date_string, compare_date_string) {
+      var args = compareArgs(base_date_string, compare_date_string)
+      return args.base.isBefore(args.compare)
+    },
+    isBeforeStartOfDay: function (base_date_string, compare_date_string) {
+      var args = compareArgs(base_date_string, compare_date_string)
+      return args.base.startOf('day').isBefore(args.compare)
+    },
+    isAfter: function (base_date_string, compare_date_string) {
+      var args = compareArgs(base_date_string, compare_date_string)
+      return args.base.isAfter(args.compare)
+    },
+    isAfterEndOfDay: function (base_date_string, compare_date_string) {
+      var args = compareArgs(base_date_string, compare_date_string)
+      return args.base.endOf('day').isAfter(args.compare)
+    },
+    isBetween: function (base_date_string, start_date_string, end_date_string) {
+      if ( ! end_date_string ) {
+        end_date_string = start_date_string
+        start_date_string = base_date_string
+        base_date_string = buildTime.format()
+      }
+      return moment(base_date_string).isBetween(
+        moment(start_date_string), moment(end_date_string), null, '[]')
+    },
+    isBetweenDay: function (base_date_string, start_date_string, end_date_string) {
+      if ( ! end_date_string ) {
+        end_date_string = start_date_string
+        start_date_string = base_date_string
+        base_date_string = buildTime.format()
+      }
+      return moment(base_date_string).isBetween(
+        moment(start_date_string).startOf('day'),
+        moment(end_date_string).endOf('day'),
+        null, '[]')
+    },
+  }
 }
