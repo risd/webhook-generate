@@ -103,6 +103,7 @@ module.exports = function(grunt) {
       inFile:  grunt.option('inFile'),
       outFile: grunt.option('outFile') || undefined,
       data: grunt.option('data') || undefined,
+      settings: grunt.option('settings') || undefined,
       emitter: grunt.option('emitter') || undefined,
     }
 
@@ -122,6 +123,7 @@ module.exports = function(grunt) {
       inFile:  'pages/cms.html',
       outFile: '.build/cms/index.html',
       data: grunt.option('data') || undefined,
+      settings: grunt.option('settings') || undefined,
       emitter: grunt.option('emitter') || undefined,
     }
 
@@ -142,6 +144,7 @@ module.exports = function(grunt) {
       file: grunt.option('inFile'),
       emitter: grunt.option('emitter') || false,
       data: grunt.option('data') || undefined,
+      settings: grunt.option('settings') || undefined,
       itemKey: grunt.option('itemKey') || undefined,
     }
 
@@ -161,6 +164,7 @@ module.exports = function(grunt) {
       concurrency: concurrencyOption( grunt.option('concurrency') ),
       emitter: grunt.option('emitter') || false,
       data: grunt.option('data') || undefined,
+      settings: grunt.option('settings') || undefined,
       pages: grunt.option('pages') || undefined,
     };
 
@@ -180,6 +184,7 @@ module.exports = function(grunt) {
       concurrency: concurrencyOption( grunt.option('concurrency') ),
       emitter: grunt.option('emitter') || false,
       data: grunt.option('data') || undefined,
+      settings: grunt.option('settings') || undefined,
       templates: grunt.option('templates') || undefined,
     };
 
@@ -231,6 +236,7 @@ module.exports = function(grunt) {
       emitter: grunt.option('emitter') || false,
       data: grunt.option('data') || undefined,
       pages: grunt.option('pages') || undefined,
+      settings: grunt.option('settings') || undefined,
       templates: grunt.option('templates') || undefined,
     };
 

@@ -97,6 +97,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
   this.versionString = null;
   this.cachedData = null;
+  this._settings = {};
 
   if(liveReloadPort === true)
   {
@@ -159,6 +160,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     if(self.cachedData)
     {
+      Object.assign(self.cachedData.settings.general, self._settings)
       if (self.cachedData.hasOwnProperty('contentType'))
         self.cachedData.typeInfo = self.cachedData.contentType
       swigFunctions.setData(self.cachedData.data);
@@ -167,6 +169,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
       swigFilters.setSiteDns(self.cachedData.siteDns);
       swigFilters.setFirebaseConf(config.get('webhook'));
       swigFilters.setTypeInfo(self.cachedData.typeInfo);
+      if (self._settings.site_url) swigFilters.setSiteDns(self._settings.site_url);
 
       callback(self.cachedData.data, self.cachedData.typeInfo);
       return;
@@ -194,6 +197,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
       } else {
         settings = data.settings;
       }
+      Object.assign(settings.general, self._settings)
 
       // Get the data portion of bucket, other things are not needed for templates
       if(!data || !data.data) {
@@ -218,6 +222,10 @@ module.exports.generator = function (config, options, logger, fileParser) {
         var siteDns = snap.val() || config.get('webhook').siteName + '.webhook.org';
         self.cachedData.siteDns = siteDns;
         swigFilters.setSiteDns(siteDns);
+        if (self._settings.site_url) {
+          self.cachedData.siteDns = self._settings.site_url;
+          swigFilters.setSiteDns(self._settings.site_url);
+        }
         swigFilters.setFirebaseConf(config.get('webhook'));
 
         callback(data, typeInfo);
@@ -963,7 +971,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * Render a single template file.
    * @param  {object}   opts
    * @param  {string}   opts.file      The template file to build
-   * @param  {string}   opts.data?     Data object to use. If not supplied, `getData` is run.
+   * @param  {string|object}  opts.data?      The data to use
+   * @param  {string|object}  opts.settings?  The settings to use
    * @param  {boolean}  opts.emitter?  Boolean to determine if the build process should emit events of progress to process.stdin
    *                                   If true, other processes can operate on the partially built site.
    * @param  {Function} done           callback
@@ -974,6 +983,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
       ? opts.file
       : path.join( 'templates', opts.file );
 
+    setSettingsFrom( opts.settings )
     setDataFrom( opts.data )
     getData( function ( data, typeInfo ) {
       if ( opts.emitter ) console.log( 'build-template:start:' + opts.file )
@@ -1178,7 +1188,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * Renders all templates in the /templates directory to the build directory
    * @param  {object}     opts?
    * @param  {number}     opts?.concurrency?  Number of CPUs to use when building templats.
-   * @param  {string}     opts?.data?         The data object to use 
+   * @param  {string|object}  opts.data?      The data to use
+   * @param  {string|object}  opts.settings?  The settings to use
    * @param  {string}     opts?.templates?    The template filtering string to pass into renderTemplates
    * @param  {boolean}    opts?.emitter?      Boolean to determine if the build process should emit events of progress to process.stdin
    *                                          If true, other processes can operate on the partially built site.
@@ -1196,6 +1207,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     var concurrency = opts.concurrency || 1;
 
+    if ( opts.settings ) setSettingsFrom( opts.settings )
     if ( opts.data ) setDataFrom( opts.data )
 
     getData(function(data, typeInfo) {
@@ -1465,12 +1477,22 @@ module.exports.generator = function (config, options, logger, fileParser) {
     else return false;
   }
 
+  function setSettingsFrom ( optionalSettings ) {
+    var settings = readData( optionalSettings )
+    if ( ( typeof settings == 'object' ) ) {
+      self._settings = settings;
+      return true;
+    }
+    else return false;
+  }
+
   /**
    * Render a single page
    * @param  {object}   opts
    * @param  {string}   opts.inFile
    * @param  {string}   opts.outFile?
-   * @param  {object}   opts.data?
+   * @param  {string|object}  opts.data?
+   * @param  {string|object}  opts.settings?
    * @param  {boolean}  opts.emitter?
    * @param  {Function} done    callback when done
    */
@@ -1482,6 +1504,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if ( ! opts.outFile ) opts.outFile = opts.inFile.replace('pages/', './.build/')
 
     if ( opts.data ) setDataFrom( opts.data )
+    if ( opts.settings ) setSettingsFrom( opts.settings )
 
     getData(function ( data ) {
       if ( opts.emitter ) console.log( 'build-page:start:' + opts.inFile )
@@ -1521,7 +1544,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * Builds templates from both /pages and /templates to the build directory
    * @param  {object}     opts
    * @param  {number}     opts.concurrency  Number of CPUs to use for build tasks
-   * @param  {object}     opts.data?        Webhook CMS data for the site
+   * @param  {string|object}  opts.data?
+   * @param  {string|object}  opts.settings?
    * @param  {string}     opts.templates?   The template filtering string to pass into renderTemplates
    * @param  {string}     opts.pages?       The page filtering string to pass into renderTemplates
    * @param  {boolean}    opts.emitter?     Boolean to determine if the build process should emit events of progress to process.stdin
@@ -1535,6 +1559,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     self.cleanFiles(null, function() {
       self.openSearchEntryStream(function() {
         setDataFrom( opts.data )
+        setSettingsFrom( opts.settings )
         getData(function ( data ) {
 
           if ( buildInParallel( opts.concurrency ) )
