@@ -1009,7 +1009,11 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
         items = _.map(items, function(value, key) { value._id = key; value._type = objectName; return value });
 
-        if ( opts.itemKey ) items = items.filter( function ( item ) { return item._id === opts.itemKey } )
+        var build_preview = false;
+        if ( opts.itemKey ) {
+          build_preview = true;
+          items = items.filter( function ( item ) { return item._id === opts.itemKey } )
+        }
 
         var publishedItems = _.filter(items, function(item) {
           if(!item.publish_date) {
@@ -1117,6 +1121,9 @@ module.exports.generator = function (config, options, logger, fileParser) {
             }
           }
 
+          // early return if we are not building preview pages
+          if ( build_preview === false ) return;
+
           for(var key in items)
           {
             var val = items[key];
@@ -1134,6 +1141,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
               writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
             }
           }
+
         } else if(filePath.indexOf('templates/' + objectName + '/layouts') !== 0) { // Handle sub pages in here
           baseNewPath = newPath;
 
