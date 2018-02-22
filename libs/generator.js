@@ -181,7 +181,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
 
     getBucket().once('value', function(data) {
-      data = data.val();
+      data = data.val() || {};
       var typeInfo = {};
       var settings = {};
 
@@ -193,7 +193,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
       }
 
       if(!data || !data.settings) {
-        settings = {};
+        settings = { general: {} };
       } else {
         settings = data.settings;
       }
