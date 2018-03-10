@@ -196,6 +196,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
         settings = { general: {} };
       } else {
         settings = data.settings;
+        if ( ! settings.general ) settings.general = {};
       }
       Object.assign(settings.general, self._settings)
 
