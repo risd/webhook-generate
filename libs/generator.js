@@ -1702,7 +1702,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
           return false;
         }
 
-        var oneOffFile = _.template(oneOffTemplate)({ widgetFiles: widgetFiles, typeName: name, typeInfo: typeInfo[name] || {}, controls: controlsObj }, { 'imports': { 'renderWidget' : renderWidget}});
+        var oneOffFile = _.template(oneOffTemplate)({ widgetFiles: widgetFiles, typeName: name, typeInfo: typeInfo[name] || {}, controls: controlsObj, 'renderWidget' : renderWidget });
         oneOffFile = oneOffFile.replace(/^\s*\n/gm, '');
 
         oneOffMD5 = md5(oneOffFile);
@@ -1717,7 +1717,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
         mkdirp.sync(directory);
 
-        var template = _.template(individualTemplate)({ widgetFiles: widgetFiles, typeName: name, typeInfo: typeInfo[name] || {}, controls: controlsObj }, { 'imports': { 'renderWidget' : renderWidget}});
+        var template = _.template(individualTemplate)({ widgetFiles: widgetFiles, typeName: name, typeInfo: typeInfo[name] || {}, controls: controlsObj, 'renderWidget' : renderWidget });
         template = template.replace(/^\s*\n/gm, '');
 
         individualMD5 = md5(template);
