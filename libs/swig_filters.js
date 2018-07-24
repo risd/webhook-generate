@@ -4,6 +4,7 @@ var _ = require('lodash');
 var utils = require('./utils.js');
 var marked = require('marked');
 var dateFormatter = require('./dateformatter.js');
+var slug = require('uslug');
 
 if (typeof String.prototype.startsWith != 'function') {
   String.prototype.startsWith = function (str){
@@ -579,6 +580,22 @@ module.exports.init = function (swig) {
     return result;
   }
 
+  var round = function(number) {
+    return Math.round(number);
+  };
+
+  var floor = function(number) {
+    return Math.floor(number);
+  };
+
+  var ceil = function(number) {
+    return Math.ceil(number);
+  };
+
+  var slugifyString = function(string) {
+    return slug(string, { lower: true });
+  };
+
   var debug = function ( input ) {
     console.log( input );
     return '';
@@ -619,6 +636,10 @@ module.exports.init = function (swig) {
   swig.setFilter('isBeforeDay', timeComparators.isBeforeStartOfDay);
   swig.setFilter('isAfter', timeComparators.isAfter);
   swig.setFilter('isAfterDay', timeComparators.isAfterEndOfDay);
-  swig.setFilter('isBetween', timeComparators.isBetween)
-  swig.setFilter('isBetweenDay', timeComparators.isBetweenDay)
+  swig.setFilter('isBetween', timeComparators.isBetween);
+  swig.setFilter('isBetweenDay', timeComparators.isBetweenDay);
+  swig.setFilter("round", round);
+  swig.setFilter("floor", floor);
+  swig.setFilter("ceil", ceil);
+  swig.setFilter("slugify", slugifyString);
 };
