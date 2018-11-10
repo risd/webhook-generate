@@ -1976,14 +1976,14 @@ module.exports.generator = function (config, options, logger, fileParser) {
       noSearch: null,
       imageproxy: null,
     }
-    var templated = _.template(confFile, Object.assign( {}, baseOptions, oldConf, firebaseConfOptions ));
+    var templated = _.template(confFile)( Object.assign( {}, baseOptions, oldConf, firebaseConfOptions ));
 
     fs.writeFileSync('./.firebase.conf', templated);
 
     if(copyCms) {
       var cmsFile = fs.readFileSync('./libs/cms.html');
 
-      var cmsTemplated = _.template(cmsFile, { siteName: firebaseConfOptions.siteName });
+      var cmsTemplated = _.template(cmsFile)({ siteName: firebaseConfOptions.siteName });
 
       mkdirp.sync('./pages/');
 
