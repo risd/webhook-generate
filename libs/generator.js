@@ -109,7 +109,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
   // We dont error out here so init can still be run
   if (firebaseUrl)
   {
-    this.root = new firebase('https://' + firebaseUrl +  '.firebaseio.com/');
+    firebase.initializeApp({
+      apiKey: config.get('webhook').firebaseAPIKey,
+      authDomain: `${ config.get('webhook').firebase }.firebaseapp.com`,
+      databaseURL: `${ config.get('webhook').firebase }.firebaseio.com`,
+    });
+    this.root = firebase.database();
   } else {
     this.root = null;
   }
@@ -135,14 +140,14 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * Used to get the bucket were using (combinaton of config and environment)
    */
   var getBucket = function() {
-    return self.root.child('buckets/' + config.get('webhook').siteName + '/' + config.get('webhook').secretKey + '/dev');
+    return self.root.ref('buckets/' + config.get('webhook').siteName + '/' + config.get('webhook').secretKey + '/dev');
   };
 
   /**
    * Used to get the dns information about a site (used for certain swig functions)
    */
   var getDnsChild = function() {
-    return self.root.child('management/sites/' + config.get('webhook').siteName + '/dns');
+    return self.root.ref('management/sites/' + config.get('webhook').siteName + '/dns');
   };
 
 

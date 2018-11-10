@@ -31,7 +31,7 @@
     "cheerio": "~0.18.0",
     "colors": "~0.6.2",
     "connect-header": "0.0.5",
-    "firebase": "1.0.2",
+    "firebase": "^5.5.8",
     "glob": "~7.1.2",
     "grunt": "~0.4.5",
     "grunt-autoprefixer": "^3.0.4",
