@@ -1958,46 +1958,32 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
   /**
    * Inintializes firebase configuration for a new site
-   * @param  {String}    sitename  Name of site to generate config for
-   * @param  {String}    secretkey Secret key for the site (gotten from firebase)
+   * @param  {Object}    firebaseConfOptions Object to be used in creating the .firebase.conf file.
    * @param  {Boolean}   copyCms   True if the CMS should be overwritten, false otherwise
    * @param  {Function}  done      Callback to call when operation is done
    */
-  this.init = function(sitename, secretkey, copyCms, firebase, server, embedly, imgix_host, imgix_secret, generator_url, done) {
+  this.init = function(firebaseConfOptions, copyCms, done) {
     var oldConf = config.get('webhook');
 
     var confFile = fs.readFileSync('./libs/.firebase.conf.jst');
 
-    if(firebase) {
+    if(firebaseConfOptions && firebaseConfOptions.firebase) {
       confFile = fs.readFileSync('./libs/.firebase-custom.conf.jst');
     }
 
-    var noSearch = null;
-
-    if(oldConf.noSearch !== null && typeof oldConf.noSearch !== 'undefined') {
-      noSearch = oldConf.noSearch;
-    }
-
     // TODO: Grab bucket information from server eventually, for now just use the site name
-    var templated = _.template(confFile)({
-      secretKey: secretkey,
-      siteName: sitename,
-      firebase: firebase,
-      embedlyKey: embedly || oldConf.embedly || 'your-embedly-key',
-      serverAddr: server || oldConf.server || 'your-server-address',
-      noSearch: noSearch,
-      imageproxy: oldConf.imageproxy || null,
-      imgix_host: imgix_host || '',
-      imgix_secret: imgix_secret || '',
-      generator_url: generator_url || default_generator_url,
-    });
+    var baseOptions = {
+      noSearch: null,
+      imageproxy: null,
+    }
+    var templated = _.template(confFile, Object.assign( {}, baseOptions, oldConf, firebaseConfOptions ));
 
     fs.writeFileSync('./.firebase.conf', templated);
 
     if(copyCms) {
       var cmsFile = fs.readFileSync('./libs/cms.html');
 
-      var cmsTemplated = _.template(cmsFile)({ siteName: sitename });
+      var cmsTemplated = _.template(cmsFile, { siteName: firebaseConfOptions.siteName });
 
       mkdirp.sync('./pages/');
 

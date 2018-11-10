@@ -731,7 +731,7 @@ module.exports.swigFunctions = function(swig) {
       getCurrentUrl: getCurrentUrl,
       getSetting: getSetting,
       random: randomElement,
-      cmsVersion: 'v2',
+      cmsVersion: 'v3',
       merge: merge,
       nextItem: nextItem,
       prevItem: prevItem,

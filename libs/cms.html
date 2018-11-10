@@ -12,7 +12,7 @@
   <meta name="socketPort" content="{{ cmsSocketPort }}">
   {% endif %}
 
-  <link rel="stylesheet" href="//webhook-assets.risd.systems/{{ cmsVersion }}/assets/app.min.css">
+  <link rel="stylesheet" href="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/app.min.css">
 
   <link rel="shortcut icon" href="/static/images/favicon.png">
   <link rel="apple-touch-icon icon-precomposed" href="/static/images/touch-icon.png"/>
@@ -20,7 +20,12 @@
   {% if firebase_conf.custom %}
   <script>
    window.ENV = {
-      dbName:     "{{ firebase_conf.firebase }}",
+      dbConfig: {
+        projectId: "{{ firebase_conf.firebase }}",
+        apiKey: "{{ firebase_conf.firebaseAPIKey }}",
+        authDomain: "{{ firebase_conf.firebase }}.firebaseapp.com",
+        databaseURL: "https://{{ firebase_conf.firebase }}.firebaseio.com"
+      },
       uploadUrl:  "{{ firebase_conf.server }}",
       embedlyKey: "{{ firebase_conf.embedly }}",
       selfHosted: true
@@ -28,9 +33,9 @@
   </script>
   {% endif %}
 
-  <script src="//webhook-assets.risd.systems/{{ cmsVersion }}/assets/js/config.min.js"></script>
-  <script src="//webhook-assets.risd.systems/{{ cmsVersion }}/assets/vendor.min.js"></script>
-  <script src="//webhook-assets.risd.systems/{{ cmsVersion }}/assets/js/app.min.js"></script>
+  <script src="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/js/config.min.js"></script>
+  <script src="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/vendor.min.js"></script>
+  <script src="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/js/app.min.js"></script>
 
 </head>
 <body>
