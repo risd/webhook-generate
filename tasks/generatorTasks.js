@@ -274,7 +274,7 @@ module.exports = function(grunt) {
 
     var firebaseConfOptions = {
       siteName: grunt.option('siteName'),
-      secretKey: grunt.option('siteToken'),
+      siteKey: grunt.option('siteKey'),
       firebase: grunt.option('firebaseName'),
       firebaseAPIKey: grunt.option('firebaseAPIKey'),
       embedlyKey: grunt.option('embedly'),

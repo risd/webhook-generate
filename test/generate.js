@@ -136,7 +136,7 @@ describe('generator', function(){
 
 
 describe('generator', function(){
-  describe('#init(sitename, secretkey, copyCms, firebase, done)', function(){
+  describe('#init(firebaseConfOptions, copyCms, done)', function(){
     it('should initialized the firebase conf and cms', function(){
     })
   })

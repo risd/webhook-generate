@@ -140,7 +140,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * Used to get the bucket were using (combinaton of config and environment)
    */
   var getBucket = function() {
-    return self.root.ref('buckets/' + config.get('webhook').siteName + '/' + config.get('webhook').secretKey + '/dev');
+    return self.root.ref('buckets/' + config.get('webhook').siteName + '/' + config.get('webhook').siteKey + '/dev');
   };
 
   /**
@@ -773,7 +773,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
                   fs.unlinkSync('.reset.zip');
 
                   self.init(config.get('webhook').siteName,
-                    config.get('webhook').secretKey,
+                    config.get('webhook').siteKey,
                     true,
                     config.get('webhook').firebase,
                     config.get('webhook').server,
