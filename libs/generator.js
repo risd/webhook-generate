@@ -84,7 +84,8 @@ var DATA_CACHE_PATH = path.join( BUILD_DIRECTORY, 'data.json' )
  */
 module.exports.generator = function (config, options, logger, fileParser) {
   var self = this;
-  var firebaseUrl = config.get('webhook').firebase || 'webhook';
+  var firebaseName = config.get('webhook').firebase;
+  var firebaseAPIKey = config.get('webhook').firebaseAPIKey;
   var liveReloadPort = config.get('connect')['wh-server'].options.livereload;
 
   if(liveReloadPort !== 35730) {
@@ -107,12 +108,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
   logger = logger || { ok: function() {}, error: function() {}, write: function() {}, writeln: function() {} };
 
   // We dont error out here so init can still be run
-  if (firebaseUrl)
+  if (firebaseName && firebaseAPIKey)
   {
     firebase.initializeApp({
-      apiKey: config.get('webhook').firebaseAPIKey,
-      authDomain: `${ config.get('webhook').firebase }.firebaseapp.com`,
-      databaseURL: `${ config.get('webhook').firebase }.firebaseio.com`,
+      apiKey: firebaseAPIKey,
+      authDomain: `${ firebaseName }.firebaseapp.com`,
+      databaseURL: `${ firebaseName }.firebaseio.com`,
     });
     this.root = firebase.database();
   } else {
