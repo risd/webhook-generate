@@ -57,6 +57,9 @@ module.exports.init = function (swig, context) {
     }
 
     function setTag ( tagObject ) {
+      if ( tagObject.name && tagObject.extension ) {
+        swig.setExtension( tagObject.name, tagObject.extension )
+      }
       swig.setTag( tagObject.name, tagObject.parse, tagObject.compile, tagObject.ends, tagObject.blockLevel )
     }
   }
