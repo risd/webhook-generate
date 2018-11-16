@@ -1,19 +1,19 @@
-'use strict';
+"use strict";
 
-var _ = require('lodash');
-var utils = require('./utils.js');
-var marked = require('marked');
-var dateFormatter = require('./dateformatter.js');
-var slug = require('uslug');
+var _ = require("lodash");
+var utils = require("./utils.js");
+var marked = require("marked");
+var dateFormatter = require("./dateformatter.js");
+var slug = require("uslug");
 
-if (typeof String.prototype.startsWith != 'function') {
-  String.prototype.startsWith = function (str){
+if (typeof String.prototype.startsWith != "function") {
+  String.prototype.startsWith = function(str) {
     return this.indexOf(str) == 0;
   };
 }
 
-if (typeof String.prototype.endsWith != 'function') {
-  String.prototype.endsWith = function (str){
+if (typeof String.prototype.endsWith != "function") {
+  String.prototype.endsWith = function(str) {
     return this.slice(-str.length) == str;
   };
 }
@@ -22,9 +22,8 @@ if (typeof String.prototype.endsWith != 'function') {
  * Defines a set of filters available in swig templates
  * @param  {Object}   swig        Swig engine to add filters to
  */
-module.exports.init = function (swig) {
-
-  var siteDns = '';
+module.exports.init = function(swig) {
+  var siteDns = "";
   var firebaseConf = {};
   var typeInfo = {};
 
@@ -33,64 +32,64 @@ module.exports.init = function (swig) {
   };
 
   var slice = function(input, offset, limit) {
-    if(typeof input === 'string') {
+    if (typeof input === "string") {
       return input.slice(offset, offset + limit);
     }
-    if(Array.isArray(input))
-    {
-      return input.slice(offset || 0, offset + limit)
+    if (Array.isArray(input)) {
+      return input.slice(offset || 0, offset + limit);
     }
 
     return utils.sliceDictionary(input, limit, offset);
   };
 
   var truncate = function(input, limit) {
-    if (!input || !limit) { return input; }
+    if (!input || !limit) {
+      return input;
+    }
 
     if (input.length > limit && input.length > 0) {
-        var new_str = input + " ";
-        new_str = input.substr (0, limit);
-        new_str = input.substr (0, new_str.lastIndexOf(" "));
-        new_str = (new_str.length > 0) ? new_str : input.substr (0, limit);
- 
-        return new_str + '...' ;
+      var new_str = input + " ";
+      new_str = input.substr(0, limit);
+      new_str = input.substr(0, new_str.lastIndexOf(" "));
+      new_str = new_str.length > 0 ? new_str : input.substr(0, limit);
+
+      return new_str + "...";
     }
 
     return input;
-  }
+  };
 
   var sort = function(input, property, reverse) {
-
-    if(_.size(input) === 0) {
+    if (_.size(input) === 0) {
       return input;
     }
 
     var first = input[0];
-    var sortProperty = '_sort_' + property;
+    var sortProperty = "_sort_" + property;
 
-    if(first[sortProperty]) {
+    if (first[sortProperty]) {
       property = sortProperty;
     }
 
-    if(reverse) {
+    if (reverse) {
       return _.sortBy(input, property).reverse();
     }
-    
-    return _.sortBy(input, property)
+
+    return _.sortBy(input, property);
   };
 
   var reverse = function(input, reverse) {
     return _(input).reverse();
   };
 
-  var groupBy = function (input, key) {
+  var groupBy = function(input, key) {
     if (!_.isArray(input)) {
       return input;
     }
 
     var out = {};
 
-    _.forEach(input, function (value) {
+    _.forEach(input, function(value) {
       if (!value.hasOwnProperty(key)) {
         return;
       }
@@ -109,127 +108,125 @@ module.exports.init = function (swig) {
   };
 
   var googleImageSize = function(image, width, height, crop) {
-
     var source = image.resize_url;
 
-    if(width === 'auto' && height === 'auto') {
+    if (width === "auto" && height === "auto") {
       return image.resize_url;
-    } else if(width === 'auto' && height) {
-      source += '=w0-h' + height;
-    } else if(width && height === 'auto') {
-      source += '=w' + width + '-h0';
-    } else if(width && height) {
-      source += '=w' + width + '-h' +height;
-    } else if(width && !height) {
-      source += '=s' + width;
+    } else if (width === "auto" && height) {
+      source += "=w0-h" + height;
+    } else if (width && height === "auto") {
+      source += "=w" + width + "-h0";
+    } else if (width && height) {
+      source += "=w" + width + "-h" + height;
+    } else if (width && !height) {
+      source += "=s" + width;
     }
 
-    if(crop) {
-      source += '-c';
+    if (crop) {
+      source += "-c";
     }
 
-    if(source.indexOf('http://') === 0) {
-      source = source.replace('http://', 'https://');
+    if (source.indexOf("http://") === 0) {
+      source = source.replace("http://", "https://");
     }
 
     return source;
-  }
+  };
 
   var imageSize = function(input, size, deprecatedHeight, deprecatedGrow) {
-
-    if(!input) {
-      return '';
+    if (!input) {
+      return "";
     }
 
-    var imageSource = '';
+    var imageSource = "";
 
-    if(typeof input === 'object') {
-
-      if(!size) {
+    if (typeof input === "object") {
+      if (!size) {
         return input.url;
       }
 
-      if(!input.resize_url) {
+      if (!input.resize_url) {
         return input.url;
       }
 
       return googleImageSize(input, size, deprecatedHeight);
-
-    } else if (typeof input === 'string') {
-      console.log('The imageSize filter only supports image objects and not raw urls.'.red);
+    } else if (typeof input === "string") {
+      console.log(
+        "The imageSize filter only supports image objects and not raw urls.".red
+      );
 
       var params = [];
-      if(size) {
-        params.push('width=' + size);
+      if (size) {
+        params.push("width=" + size);
       }
 
-      if(deprecatedHeight) {
-        params.push('height=' + deprecatedHeight);
+      if (deprecatedHeight) {
+        params.push("height=" + deprecatedHeight);
       }
 
-      if(deprecatedGrow) {
-        params.push('grow=' + deprecatedGrow);
+      if (deprecatedGrow) {
+        params.push("grow=" + deprecatedGrow);
       }
 
-      if(input.indexOf('http://') === -1) {
-        input = 'http://' + siteDns + input;
+      if (input.indexOf("http://") === -1) {
+        input = "http://" + siteDns + input;
       }
 
-      params.push('url=' + encodeURIComponent(input));
+      params.push("url=" + encodeURIComponent(input));
 
-      if(firebaseConf.embedly) {
-        params.push('key=' + firebaseConf.embedly);
+      if (firebaseConf.embedly) {
+        params.push("key=" + firebaseConf.embedly);
       } else {
-        params.push('key=13dde81b8137446e89c7933edca679eb');
+        params.push("key=13dde81b8137446e89c7933edca679eb");
       }
-      
-      imageSource = 'http://i.embed.ly/1/display/resize?' + params.join('&');
+
+      imageSource = "http://i.embed.ly/1/display/resize?" + params.join("&");
     }
 
-    return imageSource
+    return imageSource;
   };
 
   var imageCrop = function(input, size, deprecatedHeight) {
-
-    if(!input) {
-      return '';
+    if (!input) {
+      return "";
     }
-    
-    var imageSource = '';
 
-    if(typeof input === 'object') {
+    var imageSource = "";
 
-      if(!size) {
+    if (typeof input === "object") {
+      if (!size) {
         return input.url;
       }
 
-      return googleImageSize(input, size, deprecatedHeight, true);      
-    } else if (typeof input === 'string') {
-      console.log('The imageCrop filter only supports image objects and not raw urls.'.red);
+      return googleImageSize(input, size, deprecatedHeight, true);
+    } else if (typeof input === "string") {
+      console.log(
+        "The imageCrop filter only supports image objects and not raw urls.".red
+      );
 
       var params = [];
-      if(size) {
-        params.push('width=' + size);
+      if (size) {
+        params.push("width=" + size);
       }
 
-      if(deprecatedHeight) {
-        params.push('height=' + deprecatedHeight);
+      if (deprecatedHeight) {
+        params.push("height=" + deprecatedHeight);
       }
 
-      if(input.indexOf('http://') === -1) {
-        input = 'http://' + siteDns + input;
+      if (input.indexOf("http://") === -1) {
+        input = "http://" + siteDns + input;
       }
 
-      params.push('url=' + encodeURIComponent(input));
+      params.push("url=" + encodeURIComponent(input));
 
-      if(firebaseConf.embedly) {
-        params.push('key=' + firebaseConf.embedly);
+      if (firebaseConf.embedly) {
+        params.push("key=" + firebaseConf.embedly);
       } else {
-        params.push('key=13dde81b8137446e89c7933edca679eb');
+        params.push("key=13dde81b8137446e89c7933edca679eb");
       }
-      imageSource = 'http://i.embed.ly/1/display/crop?' + params.join('&');
+      imageSource = "http://i.embed.ly/1/display/crop?" + params.join("&");
     }
-    
+
     return imageSource;
   };
 
@@ -239,10 +236,10 @@ module.exports.init = function (swig) {
 
   var markdown = function(input) {
     return marked(input);
-  }
+  };
 
   var startsWith = function(input, string) {
-    if(typeof(input) !== "string") {
+    if (typeof input !== "string") {
       return false;
     }
 
@@ -250,23 +247,23 @@ module.exports.init = function (swig) {
   };
 
   var endsWith = function(input, string) {
-    if(typeof(input) !== "string") {
+    if (typeof input !== "string") {
       return false;
     }
-    
+
     return input.endsWith(string);
   };
 
   this.setTypeInfo = function(tInfo) {
     typeInfo = tInfo;
-  }
+  };
   this.setSiteDns = function(dns) {
     siteDns = dns;
-  }
+  };
 
   this.setFirebaseConf = function(conf) {
     firebaseConf = conf;
-  }
+  };
 
   /**
    * Object that represnts user defined filters.
@@ -286,67 +283,66 @@ module.exports.init = function (swig) {
    * objects used to make up the _user_filters.
    * If the function is called with no arguments, the currently
    * defined _user_filters are returned.
-   * 
+   *
    * @param  {string[]|object|string} setUserFilters Objects or strings to require into objects.
    * @return {object}  The current context if setting, or the objects set if getting.
    */
-  this.userFilters = function getSetUserFilters ( setUserFilters ) {
-    if ( ! arguments.length ) return _user_filters;
+  this.userFilters = function getSetUserFilters(setUserFilters) {
+    if (!arguments.length) return _user_filters;
 
-    if ( Array.isArray( setUserFilters ) ) {
-      setUserFilters.forEach( resolveFilter )
-    }
-    else if ( typeof setUserFilters === 'object' ) {
-      _user_filters = setUserFilters
-    }
-    else if ( typeof setUserFilters === 'string' ) {
-      resolveFilter( setUserFilters )
-    }
-    else {
-      throw new Error( 'Expects input to be an array of strings that represent a file path, object or file path string.' )
+    if (Array.isArray(setUserFilters)) {
+      setUserFilters.forEach(resolveFilter);
+    } else if (typeof setUserFilters === "object") {
+      _user_filters = setUserFilters;
+    } else if (typeof setUserFilters === "string") {
+      resolveFilter(setUserFilters);
+    } else {
+      throw new Error(
+        "Expects input to be an array of strings that represent a file path, object or file path string."
+      );
     }
 
-    Object.keys( _user_filters ).forEach( addFilterTo( swig ) )
+    Object.keys(_user_filters).forEach(addFilterTo(swig));
 
     return this;
 
-    function resolveFilter ( filterPath ) {
-      var toResolve = './../' + filterPath;
-      Object.assign( _user_filters, require( toResolve ) )
+    function resolveFilter(filterPath) {
+      var toResolve = "./../" + filterPath;
+      Object.assign(_user_filters, require(toResolve));
     }
 
-    function addFilterTo ( swig ) {
-      return function keyInFilters ( filterName ) {
-        var filterFunction = _user_filters[ filterName ]
-        swig.setFilter( filterName, filterFunction )
-      }
+    function addFilterTo(swig) {
+      return function keyInFilters(filterName) {
+        var filterFunction = _user_filters[filterName];
+        swig.setFilter(filterName, filterFunction);
+      };
     }
-  }
+  };
 
   var date = function(input, format, offset, abbr) {
     var l = format.length,
       date = new dateFormatter.DateZ(input),
       cur,
       i = 0,
-      out = '';
+      out = "";
 
-    if(!offset && typeof input === 'string') {
+    if (!offset && typeof input === "string") {
       var offsetString = input.match(/[\+-]\d{2}:\d{2}$/);
 
       var modifier = 1;
-      if(offsetString) {
+      if (offsetString) {
         offsetString = offsetString[0];
-        if(offsetString[0] === '+') {
+        if (offsetString[0] === "+") {
           modifier = -1;
         }
 
         offsetString = offsetString.slice(1);
-        var parts = offsetString.split(':');
+        var parts = offsetString.split(":");
 
         var hours = parts[0] * 1;
         var minutes = parts[1] * 1;
 
-        offset = modifier * ((hours * 60) + minutes);
+        offset = modifier * (hours * 60 + minutes);
       }
     }
 
@@ -367,44 +363,44 @@ module.exports.init = function (swig) {
   };
 
   var duration = function(input) {
-    var timestring = '';
-    var minutesString = '';
-    var secondsString = '';
-    var hourString = '';
+    var timestring = "";
+    var minutesString = "";
+    var secondsString = "";
+    var hourString = "";
 
     var seconds = Math.floor(input % 60);
     var minutesRaw = Math.floor(input / 60);
     var minutes = minutesRaw % 60;
     var hours = Math.floor(minutesRaw / 60);
 
-    if(minutes === 0) {
-      minutesString = '00';
+    if (minutes === 0) {
+      minutesString = "00";
     } else if (minutes < 10) {
-      minutesString = '0' + minutes;
+      minutesString = "0" + minutes;
     } else {
-      minutesString = '' + minutes;
+      minutesString = "" + minutes;
     }
 
-    if(seconds === 0) {
-      secondsString = '00';
+    if (seconds === 0) {
+      secondsString = "00";
     } else if (seconds < 10) {
-      secondsString = '0' + seconds;
+      secondsString = "0" + seconds;
     } else {
-      secondsString = '' + seconds;
+      secondsString = "" + seconds;
     }
 
     if (hours === 0) {
-      hourString = '';
-    }  else if (hours < 10) {
-      hourString = '0' + hours;
+      hourString = "";
+    } else if (hours < 10) {
+      hourString = "0" + hours;
     } else {
-      hourString = '' + hours;
+      hourString = "" + hours;
     }
 
-    timestring = minutesString + ':' + secondsString;
+    timestring = minutesString + ":" + secondsString;
 
-    if(hours > 0) {
-      timestring = hourString + ':' + timestring;
+    if (hours > 0) {
+      timestring = hourString + ":" + timestring;
     }
 
     return timestring;
@@ -413,83 +409,88 @@ module.exports.init = function (swig) {
   var where = function(input, property) {
     var filtered = [];
 
-    var args =  [].slice.apply(arguments);
+    var args = [].slice.apply(arguments);
     var filters = args.slice(2);
 
     input.forEach(function(item) {
-      if(filters.length === 0) {
-        if(item[property]) // Exists
+      if (filters.length === 0) {
+        if (item[property])
+          // Exists
           filtered.push(item);
       } else {
         filters.forEach(function(filter) {
-          if(item[property] === filter) {
+          if (item[property] === filter) {
             filtered.push(item);
             return false;
           }
-        })
+        });
       }
     });
     return filtered;
-  }
+  };
 
   var exclude = function(input, property) {
     var filtered = [];
 
-    var args =  [].slice.apply(arguments);
+    var args = [].slice.apply(arguments);
     var filters = args.slice(2);
 
     input.forEach(function(item) {
       var addIn = true;
 
-      if(filters.length === 0) {
-        if(!item[property]) // Exists
+      if (filters.length === 0) {
+        if (!item[property])
+          // Exists
           filtered.push(item);
       } else {
         filters.forEach(function(filter) {
-          if(Array.isArray(filter)) {
+          if (Array.isArray(filter)) {
             filter.forEach(function(checkItem) {
-              if(item[property] === checkItem[property]) {
+              if (item[property] === checkItem[property]) {
                 addIn = false;
                 return false;
               }
-            })
+            });
           } else {
-            if(item[property] === filter) {
+            if (item[property] === filter) {
               addIn = false;
               return false;
             }
           }
-        })
+        });
 
-        if(addIn) {
+        if (addIn) {
           filtered.push(item);
         }
       }
     });
     return filtered;
-  }
+  };
   var abs = function(input) {
     return Math.abs(input);
   };
 
   var linebreaks = function(input) {
-    var parts = input.replace('\r\n', '\n').replace('\r', '\n').split('\n');
- 
-    var joined = parts.join('<br/>');
+    var parts = input
+      .replace("\r\n", "\n")
+      .replace("\r", "\n")
+      .split("\n");
 
-    return '<p>' + joined + '</p>'
+    var joined = parts.join("<br/>");
+
+    return "<p>" + joined + "</p>";
   };
 
   var jsonFixer = function(key, value) {
-    if(!key) {
+    if (!key) {
       return value;
     }
 
-    if(!value) {
+    if (!value) {
       return value;
     }
 
-    if(!this._type) {
+    if (!this._type) {
       return value;
     }
 
@@ -497,88 +498,88 @@ module.exports.init = function (swig) {
     var controls = info.controls || {};
     var controlCandidates = _.where(controls, { name: key });
 
-    if(controlCandidates.length === 0) {
+    if (controlCandidates.length === 0) {
       return value;
     }
 
     var control = controlCandidates[0];
 
-    if(control.controlType === 'relation') {
-      var str = '';
-      if(Array.isArray(value)) {
+    if (control.controlType === "relation") {
+      var str = "";
+      if (Array.isArray(value)) {
         str = [];
         value.forEach(function(val) {
-          if(val._id) {
-            str.push(val._type + ' ' + val._id);
+          if (val._id) {
+            str.push(val._type + " " + val._id);
           } else {
-            str.push(val._type + ' ' + val._type);
+            str.push(val._type + " " + val._type);
           }
-        })
+        });
       } else {
-        if(value._id) {
-          str += value._type + ' ' + value._id;
+        if (value._id) {
+          str += value._type + " " + value._id;
         } else {
-          str += value._type + ' ' + value._type;
+          str += value._type + " " + value._type;
         }
       }
       return str;
     }
 
     return value;
-  }
+  };
 
   var json = function(input) {
     return JSON.stringify(input, jsonFixer);
-  }
+  };
 
   var jsonP = function(input, callbackName) {
-    if(!callbackName) {
-      callbackName = 'callback';
+    if (!callbackName) {
+      callbackName = "callback";
     }
-    return '/**/' + callbackName +  '(' + JSON.stringify(input, jsonFixer) + ')';
+    return "/**/" + callbackName + "(" + JSON.stringify(input, jsonFixer) + ")";
   };
 
   var pluralize = function(input, singular, suffix) {
-    if(singular && !suffix) {
+    if (singular && !suffix) {
       suffix = singular;
-      singular = '';
+      singular = "";
     }
 
-    if(!singular && !suffix) {
-      suffix = 's';
-      singular = '';
+    if (!singular && !suffix) {
+      suffix = "s";
+      singular = "";
     }
 
     var number = input;
 
-    if(_.isArray(input)) {
+    if (_.isArray(input)) {
       number = input.length;
     }
 
-    if(typeof number !== 'number') {
+    if (typeof number !== "number") {
       return singular;
     }
 
-    if(number > 1 || number === 0) {
+    if (number > 1 || number === 0) {
       return suffix;
-    } 
+    }
 
     return singular;
 
     return suffix;
-  }
+  };
 
   // Down and dirty hack for image classes
   // ![Real Alt Text|class1 class2 class3](src) -> alt="Real Alt Text" class="class1 class2 class3"
-  // 
-  var imgAltClass = function (input) {
+  //
+  var imgAltClass = function(input) {
     var re = /(<img.*)?alt=(['"](.*?)\|(.*?)['"])(.*>)/;
     var result = "";
-    input.split('\n').forEach(function(e,i) {
-      result += e.replace(re,"$1alt=\"$3\" class=\"$4\"$5");
+    input.split("\n").forEach(function(e, i) {
+      result += e.replace(re, '$1alt="$3" class="$4"$5');
     });
     return result;
-  }
+  };
 
   var round = function(number) {
     return Math.round(number);
@@ -596,10 +597,10 @@ module.exports.init = function (swig) {
     return slug(string, { lower: true });
   };
 
-  var debug = function ( input ) {
-    console.log( input );
-    return '';
-  }
+  var debug = function(input) {
+    console.log(input);
+    return "";
+  };
 
   markdown.safe = true;
   linebreaks.safe = true;
@@ -608,36 +609,36 @@ module.exports.init = function (swig) {
 
   var timeComparators = utils.timeComparators();
 
-  swig.setFilter('upper', upper);
-  swig.setFilter('slice', slice);
-  swig.setFilter('truncate', truncate);
-  swig.setFilter('sort', sort);
-  swig.setFilter('startsWith', startsWith);
-  swig.setFilter('endsWith', endsWith);
-  swig.setFilter('reverse', reverse);
-  swig.setFilter('imageSize', imageSize);
-  swig.setFilter('imageCrop', imageCrop);
-  swig.setFilter('size', size);
-  swig.setFilter('groupBy', groupBy);
-  swig.setFilter('markdown', markdown);
-  swig.setFilter('date', date);
-  swig.setFilter('where', where);
-  swig.setFilter('exclude', exclude);
-  swig.setFilter('duration', duration);
-  swig.setFilter('abs', abs);
-  swig.setFilter('linebreaks', linebreaks);
-  swig.setFilter('pluralize', pluralize);
-  swig.setFilter('jsonp', jsonP);
-  swig.setFilter('json', json);
-  swig.setFilter('imgAltClass', imgAltClass);
-  swig.setFilter('debug', debug);
-  swig.setFilter('isSameDay', timeComparators.isToday);
-  swig.setFilter('isBefore', timeComparators.isBefore);
-  swig.setFilter('isBeforeDay', timeComparators.isBeforeStartOfDay);
-  swig.setFilter('isAfter', timeComparators.isAfter);
-  swig.setFilter('isAfterDay', timeComparators.isAfterEndOfDay);
-  swig.setFilter('isBetween', timeComparators.isBetween);
-  swig.setFilter('isBetweenDay', timeComparators.isBetweenDay);
+  swig.setFilter("upper", upper);
+  swig.setFilter("slice", slice);
+  swig.setFilter("truncate", truncate);
+  swig.setFilter("sort", sort);
+  swig.setFilter("startsWith", startsWith);
+  swig.setFilter("endsWith", endsWith);
+  swig.setFilter("reverse", reverse);
+  swig.setFilter("imageSize", imageSize);
+  swig.setFilter("imageCrop", imageCrop);
+  swig.setFilter("size", size);
+  swig.setFilter("groupBy", groupBy);
+  swig.setFilter("markdown", markdown);
+  swig.setFilter("date", date);
+  swig.setFilter("where", where);
+  swig.setFilter("exclude", exclude);
+  swig.setFilter("duration", duration);
+  swig.setFilter("abs", abs);
+  swig.setFilter("linebreaks", linebreaks);
+  swig.setFilter("pluralize", pluralize);
+  swig.setFilter("jsonp", jsonP);
+  swig.setFilter("json", json);
+  swig.setFilter("imgAltClass", imgAltClass);
+  swig.setFilter("debug", debug);
+  swig.setFilter("isSameDay", timeComparators.isToday);
+  swig.setFilter("isBefore", timeComparators.isBefore);
+  swig.setFilter("isBeforeDay", timeComparators.isBeforeStartOfDay);
+  swig.setFilter("isAfter", timeComparators.isAfter);
+  swig.setFilter("isAfterDay", timeComparators.isAfterEndOfDay);
+  swig.setFilter("isBetween", timeComparators.isBetween);
+  swig.setFilter("isBetweenDay", timeComparators.isBetweenDay);
   swig.setFilter("round", round);
   swig.setFilter("floor", floor);
   swig.setFilter("ceil", ceil);
