@@ -594,7 +594,8 @@ module.exports.init = function(swig) {
   };
 
   var slugifyString = function(string) {
-    return slugify(string, { lower: true, remove: /[*+~.()'"!:@|]/g });
+    var slug = slugify(string, { lower: true, remove: /and|or/g });
+    return slug;
   };
 
   var debug = function(input) {
