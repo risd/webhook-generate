@@ -4,7 +4,7 @@ var _ = require("lodash");
 var utils = require("./utils.js");
 var marked = require("marked");
 var dateFormatter = require("./dateformatter.js");
-var slug = require("uslug");
+var slugify = require("slugify");
 
 if (typeof String.prototype.startsWith != "function") {
   String.prototype.startsWith = function(str) {
@@ -594,7 +594,7 @@ module.exports.init = function(swig) {
   };
 
   var slugifyString = function(string) {
-    return slug(string, { lower: true, remove: /[*+~.()'"!:@|]/g });
+    return slugify(string, { lower: true, remove: /[*+~.()'"!:@|]/g });
   };
 
   var debug = function(input) {
