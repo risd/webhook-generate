@@ -77,6 +77,6 @@
     "wrench": "~1.5.4"
   },
   "devDependencies": {
-    "rm-webhook": "^2.0.0"
+    "rm-webhook": "^2.0.1"
   }
 }
