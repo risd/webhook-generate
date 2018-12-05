@@ -2004,7 +2004,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     function cmsTitleForSiteName ( siteName ) {
       var base = 'CMS'
       if ( ! siteName ) return base;
-      return `${ siteName.split( '.' )[ 0 ] } ${base}`
+      return `${ siteName.split( ',1' )[ 0 ] } ${base}`
     }
   };
 
