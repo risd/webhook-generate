@@ -496,7 +496,7 @@ module.exports.init = function(swig) {
 
     var info = typeInfo[this._type] || {};
     var controls = info.controls || {};
-    var controlCandidates = _.where(controls, { name: key });
+    var controlCandidates = _.filter(controls, { name: key });
 
     if (controlCandidates.length === 0) {
       return value;
