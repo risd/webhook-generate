@@ -1989,7 +1989,10 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if(copyCms) {
       var cmsFile = fs.readFileSync('./libs/cms.html');
 
-      var cmsTemplated = _.template(cmsFile)({ siteName: firebaseConfOptions.siteName });
+      var cmsTemplated = _.template(cmsFile)({
+        siteName: firebaseConfOptions.siteName,
+        title: cmsTitleForSiteName( firebaseConfOptions.siteName ),
+      });
 
       mkdirp.sync('./pages/');
 
@@ -1997,6 +2000,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
 
     done(true);
+
+    function cmsTitleForSiteName ( siteName ) {
+      var base = 'CMS'
+      if ( ! siteName ) return base;
+      return `${ siteName.split( '.' )[ 0 ] } ${base}`
+    }
   };
 
   /**
