@@ -598,6 +598,10 @@ module.exports.init = function(swig) {
     return slug;
   };
 
+  var includes = function(string, substring) {
+    return string.includes(substring);
+  };
+
   var debug = function(input) {
     console.log(input);
     return "";
@@ -644,4 +648,5 @@ module.exports.init = function(swig) {
   swig.setFilter("floor", floor);
   swig.setFilter("ceil", ceil);
   swig.setFilter("slugify", slugifyString);
+  swig.setFilter("includes", includes);
 };
