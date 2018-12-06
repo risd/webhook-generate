@@ -14,11 +14,11 @@
 
   <!-- webhook CMS app stylesheet -->
   <link rel="stylesheet" href="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/app.min.css">
+  
   <!-- optional, locally supplied stylesheet to override the above -->
   <link rel="stylesheet" href="/static/styles/cms.css">
 
-  <link rel="shortcut icon" href="/static/images/favicon.png">
-  <link rel="apple-touch-icon-precomposed" href="/static/images/touch-icon.png"/>
+  {% include 'templates/partials/cms/head.html' %}
 
   {% if firebase_conf.custom %}
   <script>
@@ -40,6 +40,8 @@
   <script src="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/vendor.min.js"></script>
   <script src="//webhook-assets.risd.systems/cms/{{ cmsVersion }}/assets/js/app.min.js"></script>
 
+  {% include 'templates/partials/cms/head-js.html' %}
+
 </head>
 <body>
   <!--[if lt IE 8]>
@@ -53,5 +55,7 @@
   <script>
     window.App = require('appkit/app')["default"].create();
   </script>
+
+  {% include 'templates/partials/cms/footer.html' %}
 </body>
 </html>
