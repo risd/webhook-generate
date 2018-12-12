@@ -1302,8 +1302,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
           var args = [ 'run', 'build-template', '--' ];
           args = args.concat( [ '--inFile=' + file ] )
           args = args.concat( [ '--data=' + DATA_CACHE_PATH ] )
-          if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
           var pipe = opts.emitter ? false : true; // write to child thread?
+          if ( strictMode ) {
+            pipe = true;  // if strict mode, we are deploying, and want to catch errors.
+            args = args.concat( [ '--strict=true' ] )
+          }
+          if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
           return function parallelBuildTask ( step ) {
             runCommand(options.npm || 'npm', '.', args, pipe, function onEnd () {
               step();

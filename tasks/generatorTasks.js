@@ -93,6 +93,12 @@ module.exports = function(grunt) {
   grunt.registerTask('build-page', 'Build a single template file.', function (){
     var done = this.async();
 
+    var strict = grunt.option('strict');
+
+    if(strict === true) {
+      generator.enableStrictMode();
+    }
+
     var production = grunt.option('production');
 
     if(production === true) {
@@ -112,6 +118,12 @@ module.exports = function(grunt) {
 
   grunt.registerTask('build-page-cms', 'Build just the CMS page.', function () {
     var done = this.async();
+
+    var strict = grunt.option('strict');
+
+    if(strict === true) {
+      generator.enableStrictMode();
+    }
 
     var production = grunt.option('production');
 
@@ -134,6 +146,12 @@ module.exports = function(grunt) {
   grunt.registerTask('build-template', 'Build a single template file.', function () {
     var done = this.async();
 
+    var strict = grunt.option('strict');
+
+    if(strict === true) {
+      generator.enableStrictMode();
+    }
+
     var production = grunt.option('production');
 
     if(production === true) {
@@ -154,6 +172,12 @@ module.exports = function(grunt) {
   grunt.registerTask('build-pages', 'Generate static files from pages directory', function() {
     var done = this.async();
 
+    var strict = grunt.option('strict');
+
+    if(strict === true) {
+      generator.enableStrictMode();
+    }
+
     var production = grunt.option('production');
 
     if(production === true) {
@@ -173,6 +197,12 @@ module.exports = function(grunt) {
 
   grunt.registerTask('build-templates', 'Generate static files from templates directory', function() {
     var done = this.async();
+
+    var strict = grunt.option('strict');
+
+    if(strict === true) {
+      generator.enableStrictMode();
+    }
 
     var production = grunt.option('production');
 
