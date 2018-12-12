@@ -77,6 +77,38 @@ var cmsSocketPort = 6557;
 var BUILD_DIRECTORY = '.build';
 var DATA_CACHE_PATH = path.join( BUILD_DIRECTORY, 'data.json' )
 
+// listened to by the webhook/push command
+// to determine if the deploy should halt.
+var BUILD_STRICT_ERROR = function ( file ) {
+  return `build-strict:error:${ file }`
+}
+
+// listened to by the webhook-server-open/builder
+// to be notified of when the current file has produced all its files
+var BUILD_TEMPLATE_START = function ( file ) {
+  return `build-template:start:${ file }`
+}
+
+var BUILD_TEMPLATE_END = function ( file ) {
+  return `build-template:end:${ file }`
+}
+
+
+var BUILD_PAGE_START = function ( file ) {
+  return `build-page:start:${ file }`
+}
+
+var BUILD_PAGE_END = function ( file ) {
+  return `build-page:end:${ file }`
+}
+
+// listened to by the webhook-server-open/builder
+// to be notified of written documents to upload.
+var BUILD_DOCUMENT_WRITTEN = function ( file ) {
+  return `build:document-written:${ builtFilePath }`
+}
+
+
 /**
  * Generator that handles various commands
  * @param  {Object}   config     Configuration options from .firebase.conf
@@ -529,7 +561,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
   var writeDocument = function ( options ) {
     if ( !options ) options = {}
     fs.writeFileSync( options.file, options.content )
-    if ( options.emitter ) console.log( 'build:document-written:' + options.file )
+    if ( options.emitter ) console.log( BUILD_DOCUMENT_WRITTEN( options.file ) )
   }
 
   var doNoPublishPageTemplate = swig.renderFile( './libs/do-not-publish-page.html' ).trim()
@@ -577,6 +609,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
       self.sendSockMessage(e.toString());
 
       if(strictMode) {
+        console.log( BUILD_STRICT_ERROR( inFile ) )
         throw e;
       } else {
         console.log('Error while rendering template: ' + inFile);
@@ -993,9 +1026,9 @@ module.exports.generator = function (config, options, logger, fileParser) {
     setSettingsFrom( opts.settings )
     setDataFrom( opts.data )
     getData( function ( data, typeInfo ) {
-      if ( opts.emitter ) console.log( 'build-template:start:' + opts.file )
+      if ( opts.emitter ) console.log(  BUILD_TEMPLATE_START( opts.file ) )
       processFile( opts.file );
-      if ( opts.emitter ) console.log( 'build-template:end:' + opts.file )
+      if ( opts.emitter ) console.log( BUILD_TEMPLATE_END( opts.file ) )
       done();
 
       function processFile ( file ) {
@@ -1310,7 +1343,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
         var buildStaticFiles = wrench.readdirSyncRecursive( staticDirectory )
         buildStaticFiles.forEach( function ( builtFile ) {
           var builtFilePath = path.join( staticDirectory, builtFile );
-          console.log( 'build:document-written:./' + builtFilePath )
+          console.log( BUILD_DOCUMENT_WRITTEN( `./${ builtFilePath }` ) )
         } )
       }
     }
@@ -1522,7 +1555,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if ( opts.settings ) setSettingsFrom( opts.settings )
 
     getData(function ( data ) {
-      if ( opts.emitter ) console.log( 'build-page:start:' + opts.inFile )
+      if ( opts.emitter ) console.log( BUILD_PAGE_START( opts.inFile ) )
       var extension = path.extname( opts.inFile );
       if( extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' ) {
         writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } );
@@ -1535,7 +1568,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
         } );
       }
 
-      if ( opts.emitter ) console.log( 'build-page:end:' + opts.inFile )
+      if ( opts.emitter ) console.log( BUILD_PAGE_END( opts.inFile ) )
       done();
     })
   }
