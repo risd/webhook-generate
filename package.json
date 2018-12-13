@@ -1,6 +1,6 @@
 {
   "name": "@risd/webhook-generate",
-  "version": "2.2.8",
+  "version": "2.2.9",
   "description": "Grunt site generator for risd/webhook",
   "repository": {
     "type": "git",
@@ -33,7 +33,7 @@
     "MD5": "~1.2.1",
     "adm-zip": "~0.4.3",
     "async": "~0.2.10",
-    "cheerio": "~0.18.0",
+    "cheerio": "^1.0.0-rc.2",
     "colors": "~0.6.2",
     "connect-header": "0.0.5",
     "firebase": "^5.5.8",
