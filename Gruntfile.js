@@ -63,9 +63,13 @@ module.exports = function(grunt) {
         browsers: ['last 2 versions', 'ie 9'],
         map: true
       },
-      dist: {
+      distSite: {
         src: 'static/css/site.css',
         dest: 'static/css/site.css'
+      },
+      distCMS: {
+        src: 'static/css/cms.css',
+        dest: 'static/css/cms.css'
       }
     },
 
