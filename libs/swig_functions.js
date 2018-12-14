@@ -144,6 +144,13 @@ module.exports.swigFunctions = function(swig) {
    * @returns  {Object} The published item specified by the type/id or relation string passed in
    */
   var getItem = function(type, key, ignorePub) {
+
+    if ( typeof type === 'object' && type !== null && type._id && type._type && key === null ) {
+      // item has been previously resolved, allow it to occur within its current context.
+      key = type._id
+      type = type._type
+    }
+
     if (!type) {
       return {};
     }
