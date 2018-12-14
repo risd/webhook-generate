@@ -105,7 +105,7 @@ var BUILD_PAGE_END = function ( file ) {
 // listened to by the webhook-server-open/builder
 // to be notified of written documents to upload.
 var BUILD_DOCUMENT_WRITTEN = function ( file ) {
-  return `build:document-written:${ builtFilePath }`
+  return `build:document-written:${ file }`
 }
 
 
