@@ -271,7 +271,10 @@ module.exports = function(grunt) {
     };
 
     checkVersion(function() {
-      generator.buildBoth(options, done);
+      generator.buildBoth(options, function ( error ) {
+        if ( error ) return grunt.fail.fatal( error )
+        done()
+      });
     })
   });
 
