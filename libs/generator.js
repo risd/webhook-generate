@@ -1663,7 +1663,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
   this.buildStatic = function(opts, done) {
     var task = { type: 'static' };
 
-    buildQueue.push(Object.assign( task, opts ), function(err) {
+    buildQueue.push(Object.assign( task, opts ), function( error ) {
       if ( error ) {
         return done( error )
       }
@@ -2272,7 +2272,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Object}    grunt  Grunt object from generatorTasks
    */
   this.assetsMiddle = function(grunt) {
-    grunt.option('force', true);
+    grunt.option('force', false);
 
     if(!_.isEmpty(grunt.config.get('concat')))
     {
