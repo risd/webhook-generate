@@ -559,6 +559,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @return {undefined}
    */
   var writeDocument = function ( options ) {
+    // todo: make this async
     if ( !options ) options = {}
     fs.writeFileSync( options.file, options.content )
     if ( options.emitter ) console.log( BUILD_DOCUMENT_WRITTEN( options.file ) )
@@ -582,6 +583,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    *                                    Useful for other processes looking for when files are written.
    */
   var writeTemplate = function(inFile, outFile, params) {
+    // todo: make this async
     params = params || {};
     params['firebase_conf'] = config.get('webhook');
     var originalOutFile = outFile;
@@ -1018,6 +1020,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Function} done           callback
    */
   this.renderTemplate = function (opts, done) {
+    // todo, return any errors from processFile
 
     opts.file = (opts.file.indexOf('templates/') === 0)
       ? opts.file
@@ -1271,20 +1274,27 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
         if ( filesToBuild.length === 0 ) return cb(done);
 
+        var spawnedCommands = spawnedCommandsInterface()
         var buildTasks;
         if ( buildInParallel( concurrency ) )
-          buildTasks = filesToBuild.map(fileToParallelBuildTask);
+          buildTasks = filesToBuild.map(fileToParallelBuildTaskCmd(spawnedCommands.add));
         else
           buildTasks = filesToBuild.map(fileToBuildTask);
 
-        async.parallelLimit( buildTasks, concurrency,
-          function buildComplete ( error, results ) {
-            if ( error ) // TODO: requeue on error
+        async.parallelLimit( buildTasks, concurrency, buildComplete )
 
-            logger.ok('Finished Rendering Templates');
+        function buildComplete ( error, results ) {
+          if ( error ) {
+            // kill all spawnedCommands
+            spawnedCommands.terminate()
+            // callback with error
+            return cb( error )
+          }
 
-            if(cb) cb(done);
-          } )
+          logger.ok('Finished Rendering Templates');
+
+          if(cb) cb(done);
+        }
 
         function onlyHtmlFiles (file) {
           return (path.extname(file) === '.html');
@@ -1298,21 +1308,26 @@ module.exports.generator = function (config, options, logger, fileParser) {
           return (path.dirname(file).split('/').length > 1);
         }
 
-        function fileToParallelBuildTask ( file ) {
-          var args = [ 'run', 'build-template', '--' ];
-          args = args.concat( [ '--inFile=' + file ] )
-          args = args.concat( [ '--data=' + DATA_CACHE_PATH ] )
-          var pipe = opts.emitter ? false : true; // write to child thread?
-          if ( strictMode ) {
-            pipe = true;  // if strict mode, we are deploying, and want to catch errors.
-            args = args.concat( [ '--strict=true' ] )
+        function fileToParallelBuildTaskCmd ( addSpawnedCommands ) {
+          
+          return fileToParallelBuildTask;
+
+          function fileToParallelBuildTask ( file ) {
+            var args = [ 'run', 'build-template', '--' ];
+            args = args.concat( [ '--inFile=' + file ] )
+            args = args.concat( [ '--data=' + DATA_CACHE_PATH ] )
+
+            var pipe = opts.emitter ? false : true; // write to child thread?
+
+            if ( strictMode ) {
+              pipe = false;  // if strict mode, we are deploying, and want to see error messages.
+              args = args.concat( [ '--strict=true' ] )
+            }
+            if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
+          
+            return addSpawnedCommands( args, pipe )
           }
-          if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
-          return function parallelBuildTask ( step ) {
-            runCommand(options.npm || 'npm', '.', args, pipe, function onEnd () {
-              step();
-            })
-          }
+        
         }
 
         function fileToBuildTask ( file ) {
@@ -1322,6 +1337,55 @@ module.exports.generator = function (config, options, logger, fileParser) {
               function onComplete () {
                 step();
               } )
+          }
+        }
+
+        function spawnedCommandsInterface () {
+          var spawned = []
+
+          return {
+            add: addArgsForCmd,
+            terminate: terminateSpawned,
+          }
+
+          function addArgsForCmd ( args, pipe ) {
+            return function parallelBuildTask ( step ) {
+              var cmd = runCommand(options.npm || 'npm', '.', args, pipe)
+
+              cmd.on( 'exit', function ( exitCode ) {
+                untrackSpawnedCmd( cmd.pid )
+                if ( exitCode && typeof exitCode === 'number' && exitCode > 0 ) {
+                  var errorMessage = `
+                    Failed running:
+                    
+                    npm ${ args.join( ' ' ) }
+
+                    Scroll up to see the stack trace will let you know where the error occurred.
+                  `.trim()
+                   .split( '\n' )
+                   .map( function trimLines ( line ) { return line.trim() } )
+                   .join( '\n' )
+                  return step( new Error( errorMessage ) )
+                }
+                step()
+              } )
+
+              spawned = spawned.concat( [ cmd ] )
+            }
+          }
+
+          function terminateSpawned () {
+            spawned.forEach( function killCmd ( cmd ) { cmd.kill() } )
+          }
+
+          function untrackSpawnedCmd ( pid ) {
+            var indexInSpawned = spawned.map( pluckPid ).indexOf( pid )
+            
+            if ( indexInSpawned === -1 ) return
+
+            spawned.splice( indexInSpawned, 1 )
+
+            function pluckPid ( cmd ) { return cmd.pid }
           }
         }
 
@@ -1430,7 +1494,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
         var copyStaticOptions = {
           emitter: task.emitter
         }
-        self.copyStatic(copyStaticOptions, function() {
+        self.copyStatic(copyStaticOptions, function( error ) {
+          if ( error ) return callback( error )
           self.reloadFiles(callback);
         });
       });
@@ -1442,8 +1507,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
         pages: task.pages,
         templates: task.templates,
       }
-      self.realBuildBoth( buildBothOptions, function() {
-        callback();
+      self.realBuildBoth( buildBothOptions, function(error) {
+        callback(error);
       }, self.reloadFiles);
     }
   }, 1);
@@ -1457,8 +1522,11 @@ module.exports.generator = function (config, options, logger, fileParser) {
       pages: opts.pages,
       templates: opts.templates,
     }
-    buildQueue.push( task, function(err) {
-      done();
+    buildQueue.push( task, function(error) {
+      if ( error ) {
+        return done( error )
+      }
+      done()
     });
   };
 
@@ -1588,6 +1656,9 @@ module.exports.generator = function (config, options, logger, fileParser) {
     var task = { type: 'static' };
 
     buildQueue.push(Object.assign( task, opts ), function(err) {
+      if ( error ) {
+        return done( error )
+      }
       done();
     });
   };
@@ -1606,30 +1677,80 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
   this.realBuildBoth = function(opts, done, cb) {
-    // clean files
     self.cachedData = null;
-    self.cleanFiles(null, function() {
-      self.openSearchEntryStream(function() {
-        setDataFrom( opts.data )
-        setSettingsFrom( opts.settings )
-        getData(function ( data ) {
+    var series = []
 
-          if ( buildInParallel( opts.concurrency ) )
-            writeDataCache( { file: DATA_CACHE_PATH, data: self.cachedData } )
+    if ( opts.data ) {
+      var dataSet = setDataFrom( opts.data )
+      setSettingsFrom( opts.settings )
+    }
+    else {
+      var dataSet = false;
+      series = series.concat( [ cleanFilesStep ] )
+    }
 
-          self.renderTemplates(opts, null, function() {
-            self.copyStatic(opts, function() {
-              self.renderPages(opts, function() {}, function() {
-                self.closeSearchEntryStream(function() {
-                  cb(done);
-                });
-              });
-            });
-          });
+    if ( dataSet === false ) series = series.concat( [ getDataStep ] )
 
-        });
-      })
-    });
+    if ( buildInParallel( opts.concurrency ) ) series = series.concat( [ writeDataCacheStep ] )
+
+    series = series.concat( [
+      renderTemplatesStep( opts ),
+      copyStaticStep( opts ),
+      renderPagesStep( opts ),
+    ] )
+
+    async.series( series, handleSeries )
+
+    function handleSeries ( error ) {
+      if ( error ) done( error )
+      cb( done )
+    }
+
+    function cleanFilesStep ( step ) {
+      self.cleanFiles( null, step )
+    }
+
+    function openSearchEntryStreamStep ( step ) {
+      self.openSearchEntryStream( step )
+    }
+
+    function getDataStep ( step ) {
+      getData( function ( data ) {
+        step()
+      } )
+    }
+
+    function writeDataCacheStep ( step ) {
+      writeDataCache( { file: DATA_CACHE_PATH, data: self.cachedData } )
+      step()
+    }
+
+    function renderTemplatesStep ( opts ) {
+      return function renderTemplatesStepFn ( step ) {
+        self.renderTemplates( opts, null, step )
+      }
+    }
+
+    function copyStaticStep ( opts ) {
+      return function copyStaticFn ( step ) {
+        self.copyStatic( step )
+      }
+    }
+
+    function renderPagesStep ( opts ) {
+      return function renderPagesStepFn ( step ) {
+        self.renderPages( opts, null, renderHandler )
+
+        function renderHandler ( error ) {
+          if ( error ) return step( error )
+          step( error )
+        }
+      }
+    }
+
+    function closeSearchEntryStream ( step ) {
+      self.closeSearchEntryStream( step )
+    }
   };
 
   this.checkScaffoldingMD5 = function(name, callback) {
@@ -1847,16 +1968,23 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
   };
 
+  // cmd : str , cwd : str, args : [], pipe : boolean, cb? : function?
   var runCommand = function(cmd, cwd, args, pipe, cb) {
     if(typeof pipe == 'function') {
       cb = pipe;
       pipe = false;
     }
 
+    var commandError = null;
+
     var command = spawn(cmd, args, {
       stdio: [process.stdin, pipe ? 'pipe' : process.stdout, process.stderr],
       cwd: cwd
     });
+
+    if ( typeof cb !== 'function' ) {
+      return command;
+    }
 
     var output = '';
 
@@ -1866,27 +1994,35 @@ module.exports.generator = function (config, options, logger, fileParser) {
       });
     }
 
+    command.on( 'error', function () {
+      commandError = new Error( `Failed to run: ${ cmd } ${ args.join( ' ' ) }` )
+    } )
+
     command.on('close', function() {
-      cb(output);
+      cb( commandError, output );
     })
   }
 
   var runNpm = function(cb) {
     if(options.npmCache) {
-      runCommand(options.npm || 'npm', '.', ['config', 'get', 'cache'], true, function(diroutput) {
+      runCommand(options.npm || 'npm', '.', ['config', 'get', 'cache'], true, function(error, diroutput) {
+        if ( error ) return cb( error )
         var oldCacheDir = diroutput.trim();
-        runCommand(options.npm || 'npm', '.', ['config', 'set', 'cache', options.npmCache], function() {
-          runCommand(options.npm || 'npm', '.', ['install'], function() {
-            runCommand(options.npm || 'npm', '.', ['config', 'set', 'cache', oldCacheDir], function() {
+        runCommand(options.npm || 'npm', '.', ['config', 'set', 'cache', options.npmCache], function( error ) {
+          if ( error ) return cb( error )
+          runCommand(options.npm || 'npm', '.', ['install'], function( error ) {
+            if ( error ) return cb( error )
+            runCommand(options.npm || 'npm', '.', ['config', 'set', 'cache', oldCacheDir], function( error ) {
+              if ( error ) return cb( error )
               cb();
             });
           });
         });
       });
     } else {
-      runCommand(options.npm || 'npm', '.', ['install'], function() {
+      runCommand(options.npm || 'npm', '.', ['install'], function(error) {
         console.log('NPM done');
-        cb();
+        cb(error);
       });
     }
   };
