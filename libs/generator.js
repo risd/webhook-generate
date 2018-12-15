@@ -1508,7 +1508,15 @@ module.exports.generator = function (config, options, logger, fileParser) {
         templates: task.templates,
       }
       self.realBuildBoth( buildBothOptions, function(error) {
-        callback(error);
+        if ( error === true ) {
+          return callback()
+        }
+        else if ( error ) {
+          callback(error)  
+        }
+        else {
+          callback()
+        }
       }, self.reloadFiles);
     }
   }, 1);
@@ -1733,7 +1741,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     function copyStaticStep ( opts ) {
       return function copyStaticFn ( step ) {
-        self.copyStatic( step )
+        self.copyStatic( opts, step )
       }
     }
 
@@ -1743,7 +1751,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
         function renderHandler ( error ) {
           if ( error ) return step( error )
-          step( error )
+          step()
         }
       }
     }
