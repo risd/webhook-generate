@@ -78,6 +78,6 @@
   },
   "devDependencies": {
     "grunt-cli": "^1.2.0",
-    "rm-webhook": "^2.0.4"
+    "rm-webhook": "^2.0.5"
   }
 }
