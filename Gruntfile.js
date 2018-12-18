@@ -108,7 +108,12 @@ module.exports = function(grunt) {
     browserify: {
       client: {
         src: ['script/src/index.js'],
-        dest: 'static/javascript/site.js'
+        dest: 'static/javascript/site.js',
+        options: {
+          transform: [
+            ['babelify', { presets: ['@babel/preset-env'] }]
+          ]
+        }
       }
     },
 

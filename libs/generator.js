@@ -1309,7 +1309,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
         }
 
         function fileToParallelBuildTaskCmd ( addSpawnedCommands ) {
-          
+
           return fileToParallelBuildTask;
 
           function fileToParallelBuildTask ( file ) {
@@ -1324,10 +1324,10 @@ module.exports.generator = function (config, options, logger, fileParser) {
               args = args.concat( [ '--strict=true' ] )
             }
             if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
-          
+
             return addSpawnedCommands( args, pipe )
           }
-        
+
         }
 
         function fileToBuildTask ( file ) {
@@ -1357,7 +1357,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
                 if ( exitCode && typeof exitCode === 'number' && exitCode > 0 ) {
                   var errorMessage = `
                     Failed running:
-                    
+
                     npm ${ args.join( ' ' ) }
 
                     Scroll up to see the stack trace will let you know where the error occurred.
@@ -1380,7 +1380,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
           function untrackSpawnedCmd ( pid ) {
             var indexInSpawned = spawned.map( pluckPid ).indexOf( pid )
-            
+
             if ( indexInSpawned === -1 ) return
 
             spawned.splice( indexInSpawned, 1 )
@@ -1512,7 +1512,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
           return callback()
         }
         else if ( error ) {
-          callback(error)  
+          callback(error)
         }
         else {
           callback()
@@ -2277,11 +2277,6 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if(!_.isEmpty(grunt.config.get('concat')))
     {
       grunt.task.run('concat');
-    }
-
-    if(!_.isEmpty(grunt.config.get('uglify')))
-    {
-      grunt.task.run('uglify');
     }
 
     if(!_.isEmpty(grunt.config.get('cssmin')))
