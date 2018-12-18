@@ -1,6 +1,6 @@
 {
   "name": "@risd/webhook-generate",
-  "version": "2.2.17",
+  "version": "2.3.0",
   "description": "Grunt site generator for risd/webhook",
   "repository": {
     "type": "git",
