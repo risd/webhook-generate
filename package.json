@@ -21,7 +21,8 @@
     "npm": "^5.6.0"
   },
   "scripts": {
-    "start": "rm-wh serve",
+    "start": "npm run develop",
+    "develop": "rm-wh serve",
     "build": "grunt build",
     "deploy": "rm-wh deploy",
     "build-page": "grunt build-page",
