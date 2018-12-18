@@ -18,8 +18,7 @@ module.exports = function(grunt) {
       },
       browserify: {
         files: ['script/src/**/*.js'],
-        tasks: ['jshint',
-          'browserify:client',
+        tasks: ['browserify:client',
           'build-static'
         ]
       },
@@ -73,37 +72,6 @@ module.exports = function(grunt) {
       }
     },
 
-
-    // Detect errors and enforce consistency in Javascript
-    jshint: {
-      files: ['Gruntfile.js',
-        'script/src/**/*.js',
-        'script/test/**/*.js'
-      ],
-      options: {
-        globals: {
-          jQuery: true,
-          console: true,
-          module: true,
-          require: true,
-          global: true,
-          window: true,
-          document: true,
-          $f: true
-        },
-        curly: true,
-        eqeqeq: true,
-        immed: true,
-        indent: 4,
-        noarg: true,
-        nonbsp: true,
-        quotmark: 'single',
-        undef: true,
-        unused: true,
-        force: true
-      }
-    },
-
     // Build process for Javascript
     browserify: {
       client: {
@@ -145,7 +113,6 @@ module.exports = function(grunt) {
   });
 
   grunt.loadNpmTasks('grunt-contrib-concat');
-  grunt.loadNpmTasks('grunt-contrib-jshint');
   grunt.loadNpmTasks('grunt-sass');
   grunt.loadNpmTasks('grunt-autoprefixer');
   grunt.loadNpmTasks('grunt-browserify');
