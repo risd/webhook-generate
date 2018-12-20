@@ -17,7 +17,7 @@ module.exports = function(grunt) {
   }
 
   var oldConfig = grunt.config.data;
-  
+
   var port = grunt.option('port') || '2002';
 
 
@@ -52,7 +52,7 @@ module.exports = function(grunt) {
               var contents = fs.readFileSync('./libs/debug404.html');
               res.end(contents);
             });
-            
+
             return middlewares;
           }
         },
@@ -132,11 +132,10 @@ module.exports = function(grunt) {
   }
 
   grunt.initConfig(oldConfig);
-  
+
   grunt.loadNpmTasks('grunt-simple-watch');
   grunt.loadNpmTasks('grunt-rev');
   grunt.loadNpmTasks('grunt-contrib-concat');
-  grunt.loadNpmTasks('grunt-contrib-uglify');
   grunt.loadNpmTasks('grunt-contrib-cssmin');
   grunt.loadNpmTasks('grunt-contrib-connect');
   grunt.loadNpmTasks('grunt-connect-proxy');
