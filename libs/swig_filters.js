@@ -107,7 +107,7 @@ module.exports.init = function(swig) {
     return out;
   };
 
-  var googleImageSize = function(image, width, height, crop) {
+  var googleImageSize = function(image, width, height, crop, quality = 85) {
     var source = image.resize_url;
 
     if (width === "auto" && height === "auto") {
@@ -125,6 +125,8 @@ module.exports.init = function(swig) {
     if (crop) {
       source += "-c";
     }
+
+    source += `-l${quality}`;
 
     if (source.indexOf("http://") === 0) {
       source = source.replace("http://", "https://");
