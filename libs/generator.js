@@ -954,7 +954,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
           newFile = dir + '/' + filename + path.extname(file);
 
-          if(extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json') {
+          if(extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg') {
             writeTemplate(file, newFile, { emitter: opts.emitter });
           } else {
             mkdirp.sync(path.dirname(newFile));
