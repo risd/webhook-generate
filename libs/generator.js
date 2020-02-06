@@ -1402,7 +1402,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    */
   this.copyStatic = function(opts, callback) {
     logger.ok('Copying static');
-    var baseDirectory = 'static';
+    var baseDirectory = opts.baseDirectory ? opts.baseDirectory : 'static';
     if(fs.existsSync(baseDirectory)) {
       var staticDirectory = path.join( '.build', baseDirectory )
       mkdirp.sync( staticDirectory );
@@ -1499,7 +1499,26 @@ module.exports.generator = function (config, options, logger, fileParser) {
           self.reloadFiles(callback);
         });
       });
-    } else {
+    }
+    else if (task.type === 'styles') {
+      var copyStaticOptions = {
+        emitter: task.emitter,
+        baseDirectory: path.join('static', 'css')
+      }
+      self.copyStatic(copyStaticOptions, function () {
+        self.reloadFiles(callback)
+      })
+    }
+    else if (task.type === 'scripts') {
+      var copyStaticOptions = {
+        emitter: task.emitter,
+        baseDirectory: path.join('static', 'javascript')
+      }
+      self.copyStatic(copyStaticOptions, function () {
+        self.reloadFiles(callback)
+      })
+    }
+    else {
       var buildBothOptions = {
         concurrency: task.concurrency,
         emitter: task.emitter,
@@ -1670,6 +1689,28 @@ module.exports.generator = function (config, options, logger, fileParser) {
       done();
     });
   };
+
+  this.buildStyles = function (opts, done) {
+    var task = { type: 'styles' };
+
+    buildQueue.push(Object.assign( task, opts ), function( error ) {
+      if ( error ) {
+        return done( error )
+      }
+      done();
+    });
+  }
+
+  this.buildScripts = function (opts, done) {
+    var task = { type: 'scripts' };
+
+    buildQueue.push(Object.assign( task, opts ), function( error ) {
+      if ( error ) {
+        return done( error )
+      }
+      done();
+    });
+  }
 
   /**
    * Builds templates from both /pages and /templates to the build directory

@@ -245,6 +245,22 @@ module.exports = function(grunt) {
     })
   });
 
+  grunt.registerTask('build-styles', 'Builds styles.', function () {
+    var done = this.async();
+    var options = {
+      emitter: grunt.option('emitter') || false,
+    }
+    generator.buildStyles(options, done)
+  })
+
+  grunt.registerTask('build-scripts', 'Builds scripts.', function () {
+    var done = this.async();
+    var options = {
+      emitter: grunt.option('emitter') || false,
+    }
+    generator.buildScripts(options, done)
+  })
+
   // Build Task.
   grunt.registerTask('build', 'Clean files and then generate static site into build', function() {
     var done = this.async();
