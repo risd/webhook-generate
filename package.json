@@ -1,6 +1,6 @@
 {
   "name": "@risd/webhook-generate",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "description": "Grunt site generator for risd/webhook",
   "repository": {
     "type": "git",
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "start": "npm run develop",
-    "develop": "rm-wh serve",
+    "develop": "grunt --force",
     "build": "grunt build",
     "deploy": "rm-wh deploy",
     "build-page": "grunt build-page",
