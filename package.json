@@ -22,7 +22,7 @@
   },
   "scripts": {
     "start": "npm run develop",
-    "develop": "rm-wh serve",
+    "develop": "grunt --force",
     "build": "grunt build",
     "deploy": "rm-wh deploy",
     "build-page": "grunt build-page",
