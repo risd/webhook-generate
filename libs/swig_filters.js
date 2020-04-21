@@ -609,6 +609,13 @@ module.exports.init = function(swig) {
     return "";
   };
 
+  var stringTrim = function ( input ) {
+    if ( typeof input === 'string' ) {
+      return input.trim()
+    }
+    return input;
+  };
+
   markdown.safe = true;
   linebreaks.safe = true;
   jsonP.safe = true;
@@ -651,4 +658,5 @@ module.exports.init = function(swig) {
   swig.setFilter("ceil", ceil);
   swig.setFilter("slugify", slugifyString);
   swig.setFilter("includes", includes);
+  swig.setFilter("trim", stringTrim);
 };
