@@ -596,7 +596,7 @@ module.exports.init = function(swig) {
   };
 
   var slugifyString = function(string) {
-    var slug = slugger(string);
+    var slug = slugger(string).toLowerCase();
     return slug;
   };
 
