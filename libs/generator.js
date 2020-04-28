@@ -954,7 +954,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
           newFile = dir + '/' + filename + path.extname(file);
 
-          if(extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg') {
+          if(extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg' || extension === '.html-partial') {
             writeTemplate(file, newFile, { emitter: opts.emitter });
           } else {
             mkdirp.sync(path.dirname(newFile));
@@ -1656,7 +1656,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     getData(function ( data ) {
       if ( opts.emitter ) console.log( BUILD_PAGE_START( opts.inFile ) )
       var extension = path.extname( opts.inFile );
-      if( extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg' ) {
+      if( extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg' || extension === '.html-partial' ) {
         writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } );
       } else {
         mkdirp.sync( path.dirname( opts.outFile ) );
