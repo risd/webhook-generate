@@ -1592,7 +1592,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
     mkdirp.sync( path.dirname( options.file ) );
 
     if ( typeof options.data === 'function') var data = options.data();
-    if ( typeof options.data === 'object' )  var data = JSON.stringify( options.data );
+    if ( typeof options.data === 'object' )  var data = JSON.stringify( options.data, null, 2 );
 
     fs.writeFileSync( options.file, data )
     return options.file;
