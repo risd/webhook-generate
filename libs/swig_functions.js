@@ -366,15 +366,19 @@ module.exports.swigFunctions = function(swig) {
           return;
         }
 
-        gridArray.forEach(function(gridItem) {
-          var desc = Object.getOwnPropertyDescriptor(gridItem, field.name);
-          if (desc && desc.get) {
-            // Don't double dip
-            return;
-          }
+        gridArray
+          .filter(function(gridItem) {
+            return gridItem !== null && typeof gridItem === 'object';
+          })
+          .forEach(function(gridItem) {
+            var desc = Object.getOwnPropertyDescriptor(gridItem, field.name);
+            if (desc && desc.get) {
+              // Don't double dip
+              return;
+            }
 
-          adjustField(gridItem, field);
-        });
+            adjustField(gridItem, field);
+          });
       } else {
         var desc = Object.getOwnPropertyDescriptor(object, field.name);
         if (desc && desc.get) {
