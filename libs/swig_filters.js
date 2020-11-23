@@ -32,8 +32,11 @@ module.exports.init = function(swig) {
   };
 
   var slice = function(input, offset, limit) {
-    if (typeof input === "string") {
+    if (typeof input === "string" && typeof limit === 'number') {
       return input.slice(offset, offset + limit);
+    }
+    else if (typeof input === 'string' && limit === undefined) {
+      return input.slice(offset)
     }
     if (Array.isArray(input)) {
       return input.slice(offset || 0, offset + limit);
