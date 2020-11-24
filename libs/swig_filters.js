@@ -75,7 +75,7 @@ module.exports.init = function(swig) {
     }
 
     if (reverse) {
-      return _.sortBy(input, property).reverse().value();
+      return _.sortBy(input, property).reverse();
     }
 
     return _.sortBy(input, property);
