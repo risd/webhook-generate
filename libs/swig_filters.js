@@ -75,14 +75,14 @@ module.exports.init = function(swig) {
     }
 
     if (reverse) {
-      return _.sortBy(input, property).reverse();
+      return _.sortBy(input, property).reverse().value();
     }
 
     return _.sortBy(input, property);
   };
 
   var reverse = function(input, reverse) {
-    return _(input).reverse();
+    return _(input).reverse().value();
   };
 
   var groupBy = function(input, key) {
