@@ -33,14 +33,10 @@ module.exports = function(grunt) {
     }
   };
 
-  var npmBin = grunt.option('npmbin');
-  var nodeBin = grunt.option('nodebin');
-  var gruntBin = grunt.option('gruntbin');
-  var token = grunt.option('token');
-  var email = grunt.option('email');
-  var npmCache = grunt.option('npmcache');
+  var npmBin = grunt.option('npmbin')
+  var npmCache = grunt.option('npmcache')
 
-  var generator = require('../libs/generator').generator(grunt.config, { npm: npmBin, node: nodeBin, grunt: gruntBin, token: token, email: email, npmCache: npmCache }, grunt.log, grunt.file, root);
+  var generator = require('../libs/generator').generator(grunt.config, { npm: npmBin, npmCache: npmCache }, grunt.log, grunt.file);
 
   grunt.registerTask('scaffolding', 'Generate scaffolding for a new object', function(name) {
     var done = this.async();
@@ -51,9 +47,9 @@ module.exports = function(grunt) {
     var result = generator.makeScaffolding(name, done, force);
   });
 
-  grunt.registerTask('watch', 'Watch for changes in templates and regenerate site', function() {
+  grunt.registerTask('wh-watch', 'Watch for changes in templates and regenerate site', function() {
     generator.startLiveReload();
-    grunt.task.run('simple-watch');
+    grunt.task.run('watch')
   });
 
   grunt.registerTask('webListener', 'Listens for commands from CMS through websocket', function() {
@@ -159,7 +155,7 @@ module.exports = function(grunt) {
     }
 
     var options = {
-      file: grunt.option('inFile'),
+      inFile: grunt.option('inFile'),
       emitter: grunt.option('emitter') || false,
       data: grunt.option('data') || undefined,
       settings: grunt.option('settings') || undefined,
@@ -303,21 +299,6 @@ module.exports = function(grunt) {
   });
 
   // Change this to optionally prompt instead of requiring a sitename
-  grunt.registerTask('assets', 'Initialize the firebase configuration file (installer should do this as well)', function() {
-    var done = this.async();
-    generator.assets(grunt, done);
-  });
-
-  grunt.registerTask('assetsMiddle', 'Initialize the firebase configuration file (installer should do this as well)', function() {
-    generator.assetsMiddle(grunt);
-  });
-
-  grunt.registerTask('assetsAfter', 'Initialize the firebase configuration file (installer should do this as well)', function() {
-    var done = this.async();
-    generator.assetsAfter(grunt, done);
-  });
-
-  // Change this to optionally prompt instead of requiring a sitename
   grunt.registerTask('init', 'Initialize the firebase configuration file (installer should do this as well)', function() {
     var done = this.async();
 
@@ -340,14 +321,22 @@ module.exports = function(grunt) {
 
   // Check if initialized properly before running all these tasks
   grunt.registerTask('default',  'Clean, Build, Start Local Server, and Watch', function() {
-    grunt.task.run('configureProxies:wh-server')
-    grunt.task.run('connect:wh-server');
-    if ( grunt.option( 'skipBuild' ) ) {
+    if (grunt.option('skipBuild')) {
       grunt.task.run('build-page-cms')
     } else {
-      grunt.task.run('build');  
+      grunt.task.run('browserify')
+      grunt.task.run('sass')
+      grunt.task.run('postcss')
+      grunt.task.run('build')
     }
-    grunt.task.run('concurrent:wh-concurrent');
+
+    if (grunt.option('noWatch')) {
+      grunt.log.write('Will not start development server.')
+    }
+    else {
+      grunt.task.run('connect:wh-server')
+      grunt.task.run('concurrent:wh-concurrent')
+    }
   });
 
 };

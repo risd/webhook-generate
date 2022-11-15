@@ -32,11 +32,8 @@ module.exports.init = function(swig) {
   };
 
   var slice = function(input, offset, limit) {
-    if (typeof input === "string" && typeof limit === 'number') {
+    if (typeof input === "string") {
       return input.slice(offset, offset + limit);
-    }
-    else if (typeof input === 'string' && limit === undefined) {
-      return input.slice(offset)
     }
     if (Array.isArray(input)) {
       return input.slice(offset || 0, offset + limit);
@@ -82,7 +79,7 @@ module.exports.init = function(swig) {
   };
 
   var reverse = function(input, reverse) {
-    return _(input).reverse().value();
+    return _(input).reverse();
   };
 
   var groupBy = function(input, key) {
@@ -240,7 +237,7 @@ module.exports.init = function(swig) {
   };
 
   var markdown = function(input) {
-    return marked(input);
+    return marked.parse(input);
   };
 
   var startsWith = function(input, string) {

@@ -1,15 +1,21 @@
 'use strict';
 
 // Requires
-var firebase = require('firebase');
+const debug = require('debug')('generator')
+const {
+  initializeDatabase,
+  getBucketData,
+  getDnsChildData,
+} = require('./firebase.js')
 var request = require('request');
 var mkdirp = require('mkdirp');
 var path = require('path');
 var fs = require('fs');
+const fsp = require('fs/promises')
+const fse = require('fs-extra')
 var glob = require('glob');
 var tinylr = require('tiny-lr');
 var _ = require('lodash');
-var wrench = require('wrench');
 var utils = require('./utils.js');
 var websocketServer = require('nodejs-websocket');
 var Zip   = require('adm-zip');
@@ -25,7 +31,7 @@ var exec = require('child_process').exec;
 require('colors');
 
 // Template requires
-var swig = require('swig');
+var swig = require('@risd/swig');
 swig.setDefaults({ loader: swig.loaders.fs(__dirname + '/..') });
 var swigFunctions = require('./swig_functions').swigFunctions();
 var swigFilters = require('./swig_filters');
@@ -76,6 +82,18 @@ Function = wrap;
 var cmsSocketPort = 6557;
 var BUILD_DIRECTORY = '.build';
 var DATA_CACHE_PATH = path.join( BUILD_DIRECTORY, 'data.json' )
+let templateExtensions = [
+  '.html',
+  '.swig',
+  '.xml',
+  '.rss',
+  '.xhtml',
+  '.atom',
+  '.txt',
+  '.json',
+  '.svg',
+  '.html-partial',
+]
 
 // listened to by the webhook/push command
 // to determine if the deploy should halt.
@@ -108,11 +126,78 @@ var BUILD_DOCUMENT_WRITTEN = function ( file ) {
   return `build:document-written:${ file }`
 }
 
+const pglob = async (pattern, options) => {
+  return new Promise((resolve, reject) => {
+    glob(pattern, options, (error, matches) => {
+      if (error) return reject(error)
+      resolve(matches)
+    })
+  })
+}
+
+const isDirectory = async (filePath) => {
+  return new Promise((resolve, reject) => {
+    fs.lstat(filePath, (error, stats) => {
+      if (error) return reject(error)
+      resolve(stats.isDirectory())
+    })
+  })
+}
+
+const fileExists = async (filePath) => {
+  if (!filePath) return Promise.resolve(false)
+  return new Promise((resolve, reject) => {
+    fs.access(filePath, fs.constants.F_OK, (error) => {
+      resolve(error ? false : true)
+    })
+  })
+}
+
+const readFile = async (filePath) => {
+  return new Promise((resolve, reject) => {
+    fs.readFile(filePath, (error, content) => {
+      if (error) return reject(error)
+      resolve(content.toString())
+    })
+  })
+}
+
+const writeFile = async (filePath, content) => {
+  return new Promise((resolve, reject) => {
+    fs.writeFile(filePath, content, (error) => {
+      if (error) return reject(error)
+      resolve()
+    })
+  })
+}
 
 /**
  * Generator that handles various commands
- * @param  {Object}   config     Configuration options from .firebase.conf
- * @param  {Object}   logger     Object to use for logging, defaults to no-ops
+ * @param  {Object}  config  grunt.config object
+ * @param  {Object}  config.webhook key:value from .firebase.conf
+ * @param  {string}  config.webhook.siteKey
+ * @param  {string}  config.webhook.siteName
+ * @param  {string}  config.webhook.firebase
+ * @param  {string}  config.webhook.firebaseAPIKey
+ * @param  {string}  config.webhook.embedly
+ * @param  {string}  config.webhook.server
+ * @param  {string}  config.webhook.imgix_host
+ * @param  {string}  config.webhook.imgix_secret
+ * @param  {string}  config.webhook.generator_url
+ * @param  {boolean}  config.webhook.custom
+ * @param  {object}  config.connect
+ * @param  {object}  config.connect.wh-server
+ * @param  {object}  config.connect.wh-server.options
+ * @param  {number}  config.connect.wh-server.options.liverload
+ * @param  {Object} config.swig
+ * @param  {Object} config.swig.functions
+ * @param  {Object} config.swig.filters
+ * @param  {Object} config.swig.tags
+ * @param  {Object} options
+ * @param  {boolean} options.npmCache
+ * @param  {string} options.npm  path to npm command path to use
+ * @param  {Object}  logger  Object to use for logging, defaults to no-ops
+ * @param  {Object}  fileParse  grunt.file instance
  */
 module.exports.generator = function (config, options, logger, fileParser) {
   var self = this;
@@ -142,12 +227,11 @@ module.exports.generator = function (config, options, logger, fileParser) {
   // We dont error out here so init can still be run
   if (firebaseName && firebaseAPIKey)
   {
-    firebase.initializeApp({
+    this.root = initializeDatabase({
       apiKey: firebaseAPIKey,
       authDomain: `${ firebaseName }.firebaseapp.com`,
       databaseURL: `${ firebaseName }.firebaseio.com`,
-    });
-    this.root = firebase.database();
+    })
   } else {
     this.root = null;
   }
@@ -168,21 +252,10 @@ module.exports.generator = function (config, options, logger, fileParser) {
     }
   }
 
-
-  /**
-   * Used to get the bucket were using (combinaton of config and environment)
-   */
-  var getBucket = function() {
-    return self.root.ref('buckets/' + config.get('webhook').siteName + '/' + config.get('webhook').siteKey + '/dev');
-  };
-
-  /**
-   * Used to get the dns information about a site (used for certain swig functions)
-   */
-  var getDnsChild = function() {
-    return self.root.ref('management/sites/' + config.get('webhook').siteName + '/dns');
-  };
-
+  const userTemplateExtensions = config.get('templateExtensions')
+  if (userTemplateExtensions) {
+    templateExtensions = templateExtensions.concat(userTemplateExtensions)
+  }
 
   var getTypeData = function(type, callback) {
     getBucket().child('contentType').child(type).once('value', function(data) {
@@ -194,8 +267,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * Retrieves snapshot of data from Firebase
    * @param  {Function}   callback   Callback function to run after data is retrieved, is sent the snapshot
    */
-  var getData = function(callback) {
-
+  var getData = async function(callback) {
+    debug('get-data')
     if(self.cachedData)
     {
       Object.assign(self.cachedData.settings.general, self._settings)
@@ -209,8 +282,14 @@ module.exports.generator = function (config, options, logger, fileParser) {
       swigFilters.setTypeInfo(self.cachedData.typeInfo);
       if (self._settings.site_url) swigFilters.setSiteDns(self._settings.site_url);
 
-      callback(self.cachedData.data, self.cachedData.typeInfo);
-      return;
+      const returnValue = {
+        data: self.cachedData.data,
+        typeInfo: self.cachedData.typeInfo
+      }
+
+      if (callback) callback(returnValue)
+
+      return Promise.resolve(returnValue)
     }
 
     if(!self.root)
@@ -218,8 +297,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
       throw new Error('Missing firebase reference, may need to run init');
     }
 
-    getBucket().once('value', function(data) {
-      data = data.val() || {};
+    try {
+      let data = await getBucketData({
+        siteName: config.get('webhook').siteName,
+        siteKey: config.get('webhook').siteKey,
+      })
+
       var typeInfo = {};
       var settings = {};
 
@@ -257,19 +340,23 @@ module.exports.generator = function (config, options, logger, fileParser) {
       swigFunctions.setSettings(settings);
       swigFilters.setTypeInfo(typeInfo);
 
-      getDnsChild().once('value', function(snap) {
-        var siteDns = snap.val() || config.get('webhook').siteName + '.webhook.org';
-        self.cachedData.siteDns = siteDns;
-        swigFilters.setSiteDns(siteDns);
-        if (self._settings.site_url) {
-          self.cachedData.siteDns = self._settings.site_url;
-          swigFilters.setSiteDns(self._settings.site_url);
-        }
-        swigFilters.setFirebaseConf(config.get('webhook'));
+      let siteDns = await getDnsChildData({ siteName: config.get('webhook').siteName })
+      if (!siteDns) config.get('webhook').siteName + '.webhook.org'
 
-        callback(data, typeInfo);
-      });
-    }, function(error) {
+      self.cachedData.siteDns = siteDns;
+      swigFilters.setSiteDns(siteDns);
+      if (self._settings.site_url) {
+        self.cachedData.siteDns = self._settings.site_url;
+        swigFilters.setSiteDns(self._settings.site_url);
+      }
+      swigFilters.setFirebaseConf(config.get('webhook'));
+
+      const returnValue = { data, typeInfo }
+
+      if (callback) callback(returnValue)
+
+      return Promise.resolve(returnValue)
+    } catch (error) {
       if(error.code === 'PERMISSION_DENIED') {
         console.log('\n========================================================'.red);
         console.log('# Permission denied                                         #'.red);
@@ -277,11 +364,11 @@ module.exports.generator = function (config, options, logger, fileParser) {
         console.log('#'.red + ' You don\'t have permission to this site or your subscription expired.'.red);
         console.log('# Visit '.red + 'https://billing.webhook.com/site/'.yellow + config.get('webhook').siteName.yellow + '/'.yellow  + ' to manage your subscription.'.red);
         console.log('# ---------------------------------------------------- #'.red)
-        process.exit(0);
+        process.exit(1);
       } else {
         throw new Error(error);
       }
-    });
+    }
   };
 
   /**
@@ -294,16 +381,15 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {object}   options.emitter?  Specificy whether to emit progress to process.stout
    * @param  {Function} done
    */
-  this.downloadData = function ( options, done ) {
+  this.downloadData = async function ( options, done ) {
     if ( typeof done === 'undefined' ) done = options;
     if ( !options ) options = {};
     if ( !options.file ) options.file = DATA_CACHE_PATH;
 
 
-    getData( function ( data ) {
-      writeDataCache( { file: options.file, data: self.cachedData } )
-      done();
-    } );
+    const { data } = await getData()
+    writeDataCache( { file: options.file, data: self.cachedData } )
+    done()
   }
 
   var searchEntryStream = null;
@@ -558,11 +644,16 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {boolean}   options.emitter  If true, log out that the document has been written
    * @return {undefined}
    */
-  var writeDocument = function ( options ) {
+  var writeDocument = async function ( options ) {
     // todo: make this async
     if ( !options ) options = {}
-    fs.writeFileSync( options.file, options.content )
-    if ( options.emitter ) console.log( BUILD_DOCUMENT_WRITTEN( options.file ) )
+    return new Promise((resolve, reject) => {
+      fs.writeFile( options.file, options.content, (error) => {
+        if (error) return reject(error)
+        if ( options.emitter ) console.log( BUILD_DOCUMENT_WRITTEN( options.file ) )
+        resolve()
+      })
+    })
   }
 
   var doNoPublishPageTemplate = swig.renderFile( './libs/do-not-publish-page.html' ).trim()
@@ -582,7 +673,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {boolean}  params.emitter  If true, when writing the template, write the path to stdout.
    *                                    Useful for other processes looking for when files are written.
    */
-  var writeTemplate = function(inFile, outFile, params) {
+  var writeTemplate = async function(inFile, outFile, params) {
     // todo: make this async
     params = params || {};
     params['firebase_conf'] = config.get('webhook');
@@ -626,9 +717,8 @@ module.exports.generator = function (config, options, logger, fileParser) {
 
     if ( doNotPublishPage( output ) ) return;
 
-    mkdirp.sync(path.dirname(outFile));
-    // fs.writeFileSync(outFile, output);
-    writeDocument( { file: outFile, content: output, emitter: params.emitter } );
+    await mkdirp(path.dirname(outFile))
+    await writeDocument( { file: outFile, content: output, emitter: params.emitter } );
     writeSearchEntry(outFile, output);
 
     // Haha this crazy nonsense is to handle pagination, the swig function "paginate" makes
@@ -660,15 +750,14 @@ module.exports.generator = function (config, options, logger, fileParser) {
         }
       }
 
-      mkdirp.sync(path.dirname(outFile));
-      // fs.writeFileSync(outFile, output);
-      writeDocument( { file: outFile, content: output, emitter: params.emitter } );
+      await mkdirp(path.dirname(outFile))
+      await writeDocument( { file: outFile, content: output, emitter: params.emitter } )
       writeSearchEntry(outFile, output);
 
       swigFunctions.increasePage();
     }
 
-    return outFile.replace('./.build', '');
+    return Promise.resolve(outFile.replace('./.build', ''))
   };
 
   /**
@@ -918,71 +1007,72 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.renderPages = function (opts, done, cb)  {
+  this.renderPages = async function (opts, done, cb)  {
     logger.ok('Rendering Pages\n');
 
-    var queryFiles = opts.pages || 'pages/**/*';
-    queryFiles = (queryFiles.indexOf('pages') === 0)
-      ? queryFiles
-      : [ 'pages', queryFiles ].join('/');
+    var queryFiles = opts.pages || 'pages/**/*'
 
     if ( opts.data ) setDataFrom( opts.data )
 
-    getData(function(data) {
+    const { data } = await getData()
+    const files = await pglob(queryFiles)
 
-      glob( queryFiles , function(err, files) {
-        files.forEach(function(file) {
+    const writers = files.map(async function(file) {
+      if(await isDirectory(file)) {
+        return Promise.resolve(null)
+      }
 
-          if(fs.lstatSync(file).isDirectory()) {
-            return true;
-          }
+      var newFile = file.replace('pages', './.build');
 
-          var newFile = file.replace('pages', './.build');
+      var dir = path.dirname(newFile);
+      var filename = path.basename(newFile, path.extname(file));
+      var extension = path.extname(file);
 
-          var dir = path.dirname(newFile);
-          var filename = path.basename(newFile, path.extname(file));
-          var extension = path.extname(file);
+      if(path.extname(file) === '.html' && filename !== 'index' && path.basename(newFile) !== '404.html' && file.indexOf('.raw.html') === -1) {
+        dir = dir + '/' + filename;
+        filename = 'index';
+      }
 
-          if(path.extname(file) === '.html' && filename !== 'index' && path.basename(newFile) !== '404.html' && file.indexOf('.raw.html') === -1) {
-            dir = dir + '/' + filename;
-            filename = 'index';
-          }
+      if(filename.indexOf('.raw') !== -1 && filename.indexOf('.raw') === (filename.length - 4) && extension === '.html') {
+        filename = filename.slice(0, filename.length - 4);
+      }
 
-          if(filename.indexOf('.raw') !== -1 && filename.indexOf('.raw') === (filename.length - 4) && extension === '.html') {
-            filename = filename.slice(0, filename.length - 4);
-          }
+      newFile = dir + '/' + filename + path.extname(file);
 
-          newFile = dir + '/' + filename + path.extname(file);
+      if (templateExtensions.indexOf(extension) !== -1) {
+        await writeTemplate(file, newFile, { emitter: opts.emitter });
+      } else {
+        await mkdirp(path.dirname(newFile))
+        // fs.writeFileSync(newFile, fs.readFileSync(file));
+        await writeDocument( {
+          file: newFile,
+          content: fs.readFileSync(file),
+          emitter: opts.emitter,
+        } );
+      }
 
-          if(extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg' || extension === '.html-partial') {
-            writeTemplate(file, newFile, { emitter: opts.emitter });
-          } else {
-            mkdirp.sync(path.dirname(newFile));
-            // fs.writeFileSync(newFile, fs.readFileSync(file));
-            writeDocument( {
-              file: newFile,
-              content: fs.readFileSync(file),
-              emitter: opts.emitter,
-            } );
-          }
-        });
+      return Promise.resolve({ file, built: true })
+    })
 
-        if(fs.existsSync('./libs/.supported.js')) {
-          mkdirp.sync('./.build/.wh/_supported');
-          // fs.writeFileSync('./.build/.wh/_supported/index.html', fs.readFileSync('./libs/.supported.js'));
-          writeDocument( {
-            file: './.build/.wh/_supported/index.html',
-            content: fs.readFileSync('./libs/.supported.js'),
-            emitter: opts.emitter,
-          } );
-        }
+    await Promise.all(writers)
 
-        logger.ok('Finished Rendering Pages\n');
 
-        if(cb) cb(done);
-      });
+    if(await fileExists('./libs/.supported.js')) {
+      await mkdirp('./.build/.wh/_supported')
 
-    });
+      await writeDocument( {
+        file: './.build/.wh/_supported/index.html',
+        content: fs.readFileSync('./libs/.supported.js'),
+        emitter: opts.emitter,
+      } );
+    }
+
+    logger.ok('Finished Rendering Pages\n');
+
+    if(cb) cb(done);
+    else if (done) done()
+
+    return Promise.resolve()
   };
 
   var generatedSlugs = {};
@@ -1012,221 +1102,218 @@ module.exports.generator = function (config, options, logger, fileParser) {
   /**
    * Render a single template file.
    * @param  {object}   opts
-   * @param  {string}   opts.file      The template file to build
+   * @param  {string}   opts.inFile      The template file to build
    * @param  {string|object}  opts.data?      The data to use
    * @param  {string|object}  opts.settings?  The settings to use
    * @param  {boolean}  opts.emitter?  Boolean to determine if the build process should emit events of progress to process.stdin
    *                                   If true, other processes can operate on the partially built site.
    * @param  {Function} done           callback
    */
-  this.renderTemplate = function (opts, done) {
-    // todo, return any errors from processFile
-
-    opts.file = (opts.file.indexOf('templates/') === 0)
-      ? opts.file
-      : path.join( 'templates', opts.file );
+  this.renderTemplate = async function (opts, done) {
 
     setSettingsFrom( opts.settings )
     setDataFrom( opts.data )
-    getData( function ( data, typeInfo ) {
-      if ( opts.emitter ) console.log(  BUILD_TEMPLATE_START( opts.file ) )
-      processFile( opts.file );
-      if ( opts.emitter ) console.log( BUILD_TEMPLATE_END( opts.file ) )
-      done();
 
-      function processFile ( file ) {
-        // Here we try and abstract out the content type name from directory structure
-        var baseName = path.basename(file, '.html');
-        var newPath = path.dirname(file).replace('templates', './.build').split('/').slice(0,3).join('/');
+    const { data, typeInfo } = await getData()
 
-        var pathParts = path.dirname(file).split('/');
-        var objectName = pathParts[1];
-        var items = data[objectName];
-        var info = typeInfo[objectName];
-        var filePath = path.dirname(file);
-        var overrideFile = null;
+    if ( opts.emitter ) console.log(  BUILD_TEMPLATE_START( opts.inFile ) )
+    await processFile( opts.inFile );
+    if ( opts.emitter ) console.log( BUILD_TEMPLATE_END( opts.inFile ) )
+    if (done) done();
+    return Promise.resolve()
 
-        if(!items) {
-          logger.error('Missing data for content type ' + objectName);
-        }
+    async function processFile ( file ) {
+      debug('render-template:process-file')
+      // Here we try and abstract out the content type name from directory structure
+      var baseName = path.basename(file, '.html');
+      var newPath = path.dirname(file).replace('templates', './.build').split('/').slice(0,3).join('/');
 
-        items = _.map(items, function(value, key) { value._id = key; value._type = objectName; return value });
+      var pathParts = path.dirname(file).split('/');
+      var objectName = pathParts[1];
+      var items = data[objectName];
+      var info = typeInfo[objectName];
+      var filePath = path.dirname(file);
+      var overrideFile = null;
 
-        var build_preview = true;
-        if ( opts.itemKey ) {
-          build_preview = true;
-          items = items.filter( function ( item ) { return item._id === opts.itemKey } )
-        }
-
-        var publishedItems = _.filter(items, function(item) {
-          if(!item.publish_date) {
-            return false;
-          }
-
-          var now = Date.now();
-          var pdate = Date.parse(item.publish_date);
-
-          if(pdate > now + (1 * 60 * 1000)) {
-            return false;
-          }
-
-          return true;
-        });
-
-        var baseNewPath = '';
-
-        // Find if this thing has a template control
-        var templateWidgetName = null;
-
-        if(typeInfo[objectName]) {
-          typeInfo[objectName].controls.forEach(function(control) {
-            if(control.controlType === 'layout') {
-              templateWidgetName = control.name;
-            }
-          });
-        }
-
-        var listPath = null;
-
-        if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.listUrl) {
-          var customPathParts = newPath.split('/');
-
-          if(typeInfo[objectName].customUrls.listUrl === '#') // Special remove syntax
-          {
-            listPath = customPathParts.join('/');
-            customPathParts.splice(2, 1);
-          } else {
-            customPathParts[2] = typeInfo[objectName].customUrls.listUrl;
-          }
-
-          newPath = customPathParts.join('/');
-        }
-
-        var origNewPath = newPath;
-
-        // TODO, DETECT IF FILE ALREADY EXISTS, IF IT DOES APPEND A NUMBER TO IT DUMMY
-        if(baseName === 'list')
-        {
-          newPath = newPath + '/index.html';
-
-          if(listPath) {
-            newPath = listPath + '/index.html';
-          }
-
-          writeTemplate(file, newPath, { emitter: opts.emitter });
-
-        } else if (baseName === 'individual') {
-          // Output should be path + id + '/index.html'
-          // Should pass in object as 'item'
-          baseNewPath = newPath;
-          var previewPath = baseNewPath.replace('./.build', './.build/_wh_previews');
-
-          // TODO: Check to make sure file does not exist yet, and then adjust slug if it does? (how to handle in swig functions)
-          for(var key in publishedItems)
-          {
-            var val = publishedItems[key];
-
-            if(templateWidgetName && val[templateWidgetName]) {
-              overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
-            }
-
-            var addSlug = true;
-            if(val.slug) {
-              baseNewPath = './.build/' + val.slug + '/';
-              addSlug = false;
-            } else {
-              if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
-                baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
-              } else {
-                baseNewPath = origNewPath + '/';
-              }
-            }
-
-            var tmpSlug = '';
-            if(!val.slug) {
-              tmpSlug = generateSlug(val);
-            } else {
-              tmpSlug = val.slug;
-            }
-
-            if(addSlug) {
-              val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
-              newPath = baseNewPath + tmpSlug + '/index.html';
-            } else {
-              newPath = baseNewPath + 'index.html';
-            }
-
-            if(fs.existsSync(overrideFile)) {
-              writeTemplate(overrideFile, newPath, { item: val, emitter: opts.emitter });
-              overrideFile = null;
-            } else {
-              writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
-            }
-          }
-
-          // early return if we are not building preview pages
-          if ( build_preview === false ) return;
-
-          for(var key in items)
-          {
-            var val = items[key];
-
-            if(templateWidgetName && val[templateWidgetName]) {
-              overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
-            }
-
-            newPath = previewPath + '/' + val.preview_url + '/index.html';
-
-            if(fs.existsSync(overrideFile)) {
-              writeTemplate(overrideFile, newPath, { item: val, emitter: opts.emitter });
-              overrideFile = null;
-            } else {
-              writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
-            }
-          }
-
-        } else if(filePath.indexOf('templates/' + objectName + '/layouts') !== 0) { // Handle sub pages in here
-          baseNewPath = newPath;
-
-          var middlePathName = filePath.replace('templates/' + objectName, '') + '/' + baseName;
-          middlePathName = middlePathName.substring(1);
-
-          for(var key in publishedItems)
-          {
-            var val = publishedItems[key];
-
-            var addSlug = true;
-            if(val.slug) {
-              baseNewPath = './.build/' + val.slug + '/';
-              addSlug = false;
-            } else {
-              if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
-                baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
-              }   else {
-                baseNewPath = origNewPath + '/';
-              }
-            }
-
-            var tmpSlug = '';
-            if(!val.slug) {
-              tmpSlug = generateSlug(val);
-            } else {
-              tmpSlug = val.slug;
-            }
-
-            if(addSlug) {
-              val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
-              newPath = baseNewPath + tmpSlug + '/' + middlePathName + '/index.html';
-            } else {
-              newPath = baseNewPath + middlePathName + '/index.html';
-            }
-
-            writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
-          }
-        }
+      if(!items) {
+        logger.error('Missing data for content type ' + objectName);
       }
 
-    } )
+      items = _.map(items, function(value, key) { value._id = key; value._type = objectName; return value });
+
+      var build_preview = true;
+      if ( opts.itemKey ) {
+        build_preview = true;
+        items = items.filter( function ( item ) { return item._id === opts.itemKey } )
+      }
+
+      var publishedItems = _.filter(items, function(item) {
+        if(!item.publish_date) {
+          return false;
+        }
+
+        var now = Date.now();
+        var pdate = Date.parse(item.publish_date);
+
+        if(pdate > now + (1 * 60 * 1000)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      var baseNewPath = '';
+
+      // Find if this thing has a template control
+      var templateWidgetName = null;
+
+      if(typeInfo[objectName]) {
+        typeInfo[objectName].controls.forEach(function(control) {
+          if(control.controlType === 'layout') {
+            templateWidgetName = control.name;
+          }
+        });
+      }
+
+      var listPath = null;
+
+      if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.listUrl) {
+        var customPathParts = newPath.split('/');
+
+        if(typeInfo[objectName].customUrls.listUrl === '#') // Special remove syntax
+        {
+          listPath = customPathParts.join('/');
+          customPathParts.splice(2, 1);
+        } else {
+          customPathParts[2] = typeInfo[objectName].customUrls.listUrl;
+        }
+
+        newPath = customPathParts.join('/');
+      }
+
+      var origNewPath = newPath;
+
+      // TODO, DETECT IF FILE ALREADY EXISTS, IF IT DOES APPEND A NUMBER TO IT DUMMY
+      if(baseName === 'list')
+      {
+        newPath = newPath + '/index.html';
+
+        if(listPath) {
+          newPath = listPath + '/index.html';
+        }
+
+        await writeTemplate(file, newPath, { emitter: opts.emitter });
+
+      } else if (baseName === 'individual') {
+        // Output should be path + id + '/index.html'
+        // Should pass in object as 'item'
+        baseNewPath = newPath;
+        var previewPath = baseNewPath.replace('./.build', './.build/_wh_previews');
+
+        // TODO: Check to make sure file does not exist yet, and then adjust slug if it does? (how to handle in swig functions)
+        for(var key in publishedItems)
+        {
+          var val = publishedItems[key];
+
+          if(templateWidgetName && val[templateWidgetName]) {
+            overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
+          }
+
+          var addSlug = true;
+          if(val.slug) {
+            baseNewPath = './.build/' + val.slug + '/';
+            addSlug = false;
+          } else {
+            if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
+              baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
+            } else {
+              baseNewPath = origNewPath + '/';
+            }
+          }
+
+          var tmpSlug = '';
+          if(!val.slug) {
+            tmpSlug = generateSlug(val);
+          } else {
+            tmpSlug = val.slug;
+          }
+
+          if(addSlug) {
+            val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
+            newPath = baseNewPath + tmpSlug + '/index.html';
+          } else {
+            newPath = baseNewPath + 'index.html';
+          }
+
+          if(await fileExists(overrideFile)) {
+            await writeTemplate(overrideFile, newPath, { item: val, emitter: opts.emitter });
+            overrideFile = null;
+          } else {
+            await writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
+          }
+        }
+
+        // early return if we are not building preview pages
+        if ( build_preview === false ) return;
+
+        for(var key in items)
+        {
+          var val = items[key];
+
+          if(templateWidgetName && val[templateWidgetName]) {
+            overrideFile = 'templates/' + objectName + '/layouts/' + val[templateWidgetName];
+          }
+
+          newPath = previewPath + '/' + val.preview_url + '/index.html';
+
+          if(await fileExists(overrideFile)) {
+            await writeTemplate(overrideFile, newPath, { item: val, emitter: opts.emitter });
+            overrideFile = null;
+          } else {
+            await writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
+          }
+        }
+
+      } else if(filePath.indexOf('templates/' + objectName + '/layouts') !== 0) { // Handle sub pages in here
+        baseNewPath = newPath;
+
+        var middlePathName = filePath.replace('templates/' + objectName, '') + '/' + baseName;
+        middlePathName = middlePathName.substring(1);
+
+        for(var key in publishedItems)
+        {
+          var val = publishedItems[key];
+
+          var addSlug = true;
+          if(val.slug) {
+            baseNewPath = './.build/' + val.slug + '/';
+            addSlug = false;
+          } else {
+            if(typeInfo[objectName] && typeInfo[objectName].customUrls && typeInfo[objectName].customUrls.individualUrl) {
+              baseNewPath = origNewPath + '/' + utils.parseCustomUrl(typeInfo[objectName].customUrls.individualUrl, val) + '/';
+            }   else {
+              baseNewPath = origNewPath + '/';
+            }
+          }
+
+          var tmpSlug = '';
+          if(!val.slug) {
+            tmpSlug = generateSlug(val);
+          } else {
+            tmpSlug = val.slug;
+          }
+
+          if(addSlug) {
+            val.slug = baseNewPath.replace('./.build/', '') + tmpSlug;
+            newPath = baseNewPath + tmpSlug + '/' + middlePathName + '/index.html';
+          } else {
+            newPath = baseNewPath + middlePathName + '/index.html';
+          }
+
+          await writeTemplate(file, newPath, { item: val, emitter: opts.emitter });
+        }
+      }
+    }
   }
 
 
@@ -1247,7 +1334,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.renderTemplates = function(opts, done, cb) {
+  this.renderTemplates = async function(opts, done, cb) {
     logger.ok('Rendering Templates');
     generatedSlugs = {};
 
@@ -1261,184 +1348,176 @@ module.exports.generator = function (config, options, logger, fileParser) {
     if ( opts.settings ) setSettingsFrom( opts.settings )
     if ( opts.data ) setDataFrom( opts.data )
 
-    getData(function(data, typeInfo) {
+    const { data, typeInfo } = await getData()
+    const files = await pglob(queryFiles)
 
-      glob(queryFiles, function(err, files) {
+    var filesToBuild = files
+      .filter(onlyHtmlFiles)
+      .filter(notAPartial)
+      .filter(isFilePath);
 
-        if ( err ) logger.error(err.message)
+    if ( filesToBuild.length === 0 ) {
+      if (cb) cb(done)
+      return Promise.resolve()
+    }
 
-        var filesToBuild = files
-          .filter(onlyHtmlFiles)
-          .filter(notAPartial)
-          .filter(isFilePath);
+    var spawnedCommands = spawnedCommandsInterface()
+    let buildTasks;
+    if ( buildInParallel( concurrency ) )
+      buildTasks = filesToBuild.map(fileToParallelBuildTaskCmd(spawnedCommands.add));
+    else
+      buildTasks = filesToBuild.map(fileToBuildTask);
 
-        if ( filesToBuild.length === 0 ) return cb(done);
+    return new Promise((resolve, reject) => {
+      async.parallelLimit( buildTasks, concurrency, buildComplete )
 
-        var spawnedCommands = spawnedCommandsInterface()
-        var buildTasks;
-        if ( buildInParallel( concurrency ) )
-          buildTasks = filesToBuild.map(fileToParallelBuildTaskCmd(spawnedCommands.add));
-        else
-          buildTasks = filesToBuild.map(fileToBuildTask);
-
-        async.parallelLimit( buildTasks, concurrency, buildComplete )
-
-        function buildComplete ( error, results ) {
-          if ( error ) {
-            // kill all spawnedCommands
-            spawnedCommands.terminate()
-            // callback with error
-            return cb( error )
-          }
-
-          logger.ok('Finished Rendering Templates');
-
-          if(cb) cb(done);
+      function buildComplete ( error, results ) {
+        if ( error ) {
+          // kill all spawnedCommands
+          spawnedCommands.terminate()
+          // callback with error
+          if (cb) cb( error )
+          return reject(error)
         }
 
-        function onlyHtmlFiles (file) {
-          return (path.extname(file) === '.html');
+        logger.ok('Finished Rendering Templates');
+
+        if(cb) cb(done);
+        return resolve()
+      }
+    })
+
+    function onlyHtmlFiles (file) {
+      return (path.extname(file) === '.html');
+    }
+
+    function notAPartial (file) {
+      return (file.indexOf('templates/partials') !== 0);
+    }
+
+    function isFilePath (file) {
+      return (path.dirname(file).split('/').length > 1);
+    }
+
+    function fileToParallelBuildTaskCmd ( addSpawnedCommands ) {
+
+      return fileToParallelBuildTask;
+
+      function fileToParallelBuildTask ( file ) {
+        var args = [ 'run', 'build-template', '--' ];
+        args = args.concat( [ '--inFile=' + file ] )
+        args = args.concat( [ '--data=' + DATA_CACHE_PATH ] )
+
+        var pipe = opts.emitter ? false : true; // write to child thread?
+
+        if ( strictMode ) {
+          pipe = false;  // if strict mode, we are deploying, and want to see error messages.
+          args = args.concat( [ '--strict=true' ] )
         }
+        if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
 
-        function notAPartial (file) {
-          return (file.indexOf('templates/partials') !== 0);
-        }
+        return addSpawnedCommands( args, pipe )
+      }
 
-        function isFilePath (file) {
-          return (path.dirname(file).split('/').length > 1);
-        }
+    }
 
-        function fileToParallelBuildTaskCmd ( addSpawnedCommands ) {
+    function fileToBuildTask ( file ) {
+      return function buildTask ( step ) {
+        self.renderTemplate(
+          { file: file, data: data, emitter: opts.emitter },
+          function onComplete () {
+            step();
+          } )
+      }
+    }
 
-          return fileToParallelBuildTask;
+    function spawnedCommandsInterface () {
+      var spawned = []
 
-          function fileToParallelBuildTask ( file ) {
-            var args = [ 'run', 'build-template', '--' ];
-            args = args.concat( [ '--inFile=' + file ] )
-            args = args.concat( [ '--data=' + DATA_CACHE_PATH ] )
+      return {
+        add: addArgsForCmd,
+        terminate: terminateSpawned,
+      }
 
-            var pipe = opts.emitter ? false : true; // write to child thread?
+      function addArgsForCmd ( args, pipe ) {
+        return function parallelBuildTask ( step ) {
+          var cmd = runCommand(options.npm || 'npm', '.', args, pipe)
 
-            if ( strictMode ) {
-              pipe = false;  // if strict mode, we are deploying, and want to see error messages.
-              args = args.concat( [ '--strict=true' ] )
+          cmd.on( 'exit', function ( exitCode ) {
+            untrackSpawnedCmd( cmd.pid )
+            if ( exitCode && typeof exitCode === 'number' && exitCode > 0 ) {
+              var errorMessage = `
+                Failed running:
+
+                npm ${ args.join( ' ' ) }
+
+                Scroll up to see the stack trace will let you know where the error occurred.
+              `.trim()
+               .split( '\n' )
+               .map( function trimLines ( line ) { return line.trim() } )
+               .join( '\n' )
+              return step( new Error( errorMessage ) )
             }
-            if ( opts.emitter ) args = args.concat( [ '--emitter' ] )
+            step()
+          } )
 
-            return addSpawnedCommands( args, pipe )
-          }
-
+          spawned = spawned.concat( [ cmd ] )
         }
+      }
 
-        function fileToBuildTask ( file ) {
-          return function buildTask ( step ) {
-            self.renderTemplate(
-              { file: file, data: data, emitter: opts.emitter },
-              function onComplete () {
-                step();
-              } )
-          }
-        }
+      function terminateSpawned () {
+        spawned.forEach( function killCmd ( cmd ) { cmd.kill() } )
+      }
 
-        function spawnedCommandsInterface () {
-          var spawned = []
+      function untrackSpawnedCmd ( pid ) {
+        var indexInSpawned = spawned.map( pluckPid ).indexOf( pid )
 
-          return {
-            add: addArgsForCmd,
-            terminate: terminateSpawned,
-          }
+        if ( indexInSpawned === -1 ) return
 
-          function addArgsForCmd ( args, pipe ) {
-            return function parallelBuildTask ( step ) {
-              var cmd = runCommand(options.npm || 'npm', '.', args, pipe)
+        spawned.splice( indexInSpawned, 1 )
 
-              cmd.on( 'exit', function ( exitCode ) {
-                untrackSpawnedCmd( cmd.pid )
-                if ( exitCode && typeof exitCode === 'number' && exitCode > 0 ) {
-                  var errorMessage = `
-                    Failed running:
-
-                    npm ${ args.join( ' ' ) }
-
-                    Scroll up to see the stack trace will let you know where the error occurred.
-                  `.trim()
-                   .split( '\n' )
-                   .map( function trimLines ( line ) { return line.trim() } )
-                   .join( '\n' )
-                  return step( new Error( errorMessage ) )
-                }
-                step()
-              } )
-
-              spawned = spawned.concat( [ cmd ] )
-            }
-          }
-
-          function terminateSpawned () {
-            spawned.forEach( function killCmd ( cmd ) { cmd.kill() } )
-          }
-
-          function untrackSpawnedCmd ( pid ) {
-            var indexInSpawned = spawned.map( pluckPid ).indexOf( pid )
-
-            if ( indexInSpawned === -1 ) return
-
-            spawned.splice( indexInSpawned, 1 )
-
-            function pluckPid ( cmd ) { return cmd.pid }
-          }
-        }
-
-      });
-    });
-  };
+        function pluckPid ( cmd ) { return cmd.pid }
+      }
+    }
+  }
 
   /**
    * Copies the static directory into .build/static for asset generation
    * @param  {boolean}  opts
+   * @param  {string}   opts.baseDirectory?  Optional directory to copy. Sefaults to 'static'
    * @param  {boolean}  opts.emitter?      Boolean to determine if the build process should emit events of progress to process.stdin
    *                                        If true, other processes can operate on the partially built site.
    * @param  {Function} callback     Callback called after creation of directory is done
    */
-  this.copyStatic = function(opts, callback) {
+  this.copyStatic = async function(opts, callback) {
     logger.ok('Copying static');
     var baseDirectory = opts.baseDirectory ? opts.baseDirectory : 'static';
-    if(fs.existsSync(baseDirectory)) {
+    if(await fileExists(baseDirectory)) {
       var staticDirectory = path.join( '.build', baseDirectory )
-      mkdirp.sync( staticDirectory );
-      wrench.copyDirSyncRecursive(baseDirectory, staticDirectory, { forceDelete: true });
+      await mkdirp(staticDirectory)
+      try {
+        await fse.copy(baseDirectory, staticDirectory)
+      } catch (error) {
+        debug('copy-static:copy:error')
+        debug(error)
+      }
       if ( opts.emitter ) {
-        var buildStaticFiles = wrench.readdirSyncRecursive( staticDirectory )
-        buildStaticFiles.forEach( function ( builtFile ) {
-          var builtFilePath = path.join( staticDirectory, builtFile );
-          console.log( BUILD_DOCUMENT_WRITTEN( `./${ builtFilePath }` ) )
-        } )
-      }
-    }
-    callback();
-  };
-
-  var removeDirectory = function(directory, callback) {
-    var isWin = /^win/.test(process.platform);
-
-    if(isWin) {
-      exec('rmdir /s /q ' + directory, function(err) {
-
-        if(err) {
-          if(fs.existsSync(directory)) {
-            wrench.rmdirSyncRecursive(directory);
-          }
+        try {
+          const buildStaticFiles = await pglob('**/*', { cwd: staticDirectory })  
+          debug('copy-statc:build-static-files')
+          buildStaticFiles.forEach( function ( builtFile ) {
+            var builtFilePath = path.join( staticDirectory, builtFile );
+            console.log( BUILD_DOCUMENT_WRITTEN( `./${ builtFilePath }` ) )
+          } )
+        } catch (error) {
+          debug('copy-static:emit-built-files:error')
+          debug(error)
         }
-        callback();
-      });
-    } else {
-      if(fs.existsSync(directory)) {
-        wrench.rmdirSyncRecursive(directory);
       }
-
-      callback();
     }
-  }
+    if (callback) callback();
+    return Promise.resolve()
+  };
 
   self.staticHashs = false;
   self.changedStaticFiles = [];
@@ -1447,76 +1526,94 @@ module.exports.generator = function (config, options, logger, fileParser) {
   * This creates a hash table of all the static files, used to send detailed information to livereload
   * We only do this for static files for speed, for regular files a full reload usually is ok.
   */
-  var createStaticHashs = function() {
+  var createStaticHashs = async function() {
+    debug('create-static-hashes')
     self.staticHashs = {};
     self.changedStaticFiles = [];
 
-    if(fs.existsSync('.build/static')) {
-      var files = wrench.readdirSyncRecursive('.build/static');
+    if(await fileExists('.build/static')) {
+      var files = await pglob('**/*', { cwd: '.build/static' })
 
-      files.forEach(function(file) {
-        var file = '.build/static/' + file;
-
-        if(!fs.lstatSync(file).isDirectory()) {
-          var hash = md5(fs.readFileSync(file));
-
-          self.staticHashs[file] = hash;
-        }
+      const hashers = files.map(function(file) {
+        return new Promise(async (resolve, reject) => {
+          const staticPath = '.build/static/' + file;
+          if(!await isDirectory(staticPath)) {
+            try {
+              const content = await readFile(staticPath)
+              var hash = md5(content)
+              self.staticHashs[staticPath] = hash
+            } catch (error) {
+              debug('create-static-hashes:error')
+              debug(error)
+            }
+          }
+          resolve()
+        })
       })
+
+      await Promise.all(hashers)
     } else {
       self.staticHashs = false;
       self.changedStaticFiles = [];
     }
-  };
+
+    return Promise.resolve()
+  }
 
   /**
    * Cleans the build directory
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.cleanFiles = function(done, cb) {
+  this.cleanFiles = async function(done, cb) {
       logger.ok('Cleaning files');
-
-      removeDirectory('.build', function() {
-        if (cb) cb();
-        if (done) done(true);
-      });
+      await fse.remove('.build')
+      if (done) done()
+      if (cb) cb()
+      debug('clean-files:resolve')
+      return Promise.resolve()
   };
 
-  var buildQueue = async.queue(function (task, callback) {
+  var buildQueue = async.queue(async function (task, callback) {
+    debug('build-queue')
     if(task.type === 'static') {
+      debug('build-queue:static')
 
       // For static builds we create a hash table to send correct livereload info
       // We only do this for static files for speed, normal builds dont really matter
-      createStaticHashs();
+      await createStaticHashs()
 
-      removeDirectory('.build/static', function() {
-        var copyStaticOptions = {
-          emitter: task.emitter
-        }
-        self.copyStatic(copyStaticOptions, function( error ) {
-          if ( error ) return callback( error )
-          self.reloadFiles(callback);
-        });
-      });
+      debug('remove:static')
+      await fse.remove('.build/static')
+      var copyStaticOptions = {
+        emitter: task.emitter
+      }
+      await self.copyStatic(copyStaticOptions)
+      await self.reloadFiles()
+      if (callback) callback()
+      return Promise.resolve()
     }
     else if (task.type === 'styles') {
+      debug('build-queue:styles')
       var copyStaticOptions = {
         emitter: task.emitter,
         baseDirectory: path.join('static', 'css')
       }
-      self.copyStatic(copyStaticOptions, function () {
-        self.reloadFiles(callback)
-      })
+      await self.copyStatic(copyStaticOptions)
+      await self.reloadFiles()
+      if (callback) callback()
+      return Promise.resolve()
     }
     else if (task.type === 'scripts') {
+      debug('build-queue:scripts')
       var copyStaticOptions = {
         emitter: task.emitter,
-        baseDirectory: path.join('static', 'javascript')
+        baseDirectory: path.join('static', 'javascript'),
       }
-      self.copyStatic(copyStaticOptions, function () {
-        self.reloadFiles(callback)
-      })
+      await self.copyStatic(copyStaticOptions)
+      await self.reloadFiles()
+      if (callback) callback()
+      return Promise.resolve()
     }
     else {
       var buildBothOptions = {
@@ -1526,17 +1623,10 @@ module.exports.generator = function (config, options, logger, fileParser) {
         pages: task.pages,
         templates: task.templates,
       }
-      self.realBuildBoth( buildBothOptions, function(error) {
-        if ( error === true ) {
-          return callback()
-        }
-        else if ( error ) {
-          callback(error)
-        }
-        else {
-          callback()
-        }
-      }, self.reloadFiles);
+      await self.realBuildBoth(buildBothOptions)
+      await self.reloadFiles()
+      if (callback) callback()
+      return Promise.resolve()
     }
   }, 1);
 
@@ -1586,16 +1676,16 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {object}  options.data  The data to write to file
    * @return {string}  file          The file written to
    */
-  var writeDataCache = function ( options ) {
+  var writeDataCache = async function ( options ) {
     if ( !options ) options = {}
 
-    mkdirp.sync( path.dirname( options.file ) );
+    await mkdirp( path.dirname( options.file ) );
 
     if ( typeof options.data === 'function') var data = options.data();
-    if ( typeof options.data === 'object' )  var data = JSON.stringify( options.data, null, 2 );
+    if ( typeof options.data === 'object' )  var data = JSON.stringify( options.data );
 
-    fs.writeFileSync( options.file, data )
-    return options.file;
+    await writeFile(options.file, data)
+    return Promise.resolve(options.file)
   }
 
   /**
@@ -1641,35 +1731,36 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {string|object}  opts.data?
    * @param  {string|object}  opts.settings?
    * @param  {boolean}  opts.emitter?
-   * @param  {Function} done    callback when done
+   * @param  {Function} done?  callback when done
    */
-  this.renderPage = function (opts, done) {
-    opts.inFile = (opts.inFile.indexOf('pages/') === 0)
-      ? opts.inFile
-      : [ 'pages', opts.inFile ].join('/');
-
+  this.renderPage = async function (opts, done) {
     if ( ! opts.outFile ) opts.outFile = opts.inFile.replace('pages/', './.build/')
 
     if ( opts.data ) setDataFrom( opts.data )
     if ( opts.settings ) setSettingsFrom( opts.settings )
 
-    getData(function ( data ) {
-      if ( opts.emitter ) console.log( BUILD_PAGE_START( opts.inFile ) )
-      var extension = path.extname( opts.inFile );
-      if( extension === '.html' || extension === '.xml' || extension === '.rss' || extension === '.xhtml' || extension === '.atom' || extension === '.txt' || extension === '.json' || extension === '.svg' || extension === '.html-partial' ) {
-        writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } );
-      } else {
-        mkdirp.sync( path.dirname( opts.outFile ) );
-        writeDocument( {
+    const data = await getData()
+    
+    if ( opts.emitter ) console.log( BUILD_PAGE_START( opts.inFile ) )
+    var extension = path.extname( opts.inFile );
+    if (templateExtensions.indexOf(extension) !== -1) {
+      await writeTemplate( opts.inFile, opts.outFile, { emitter: opts.emitter } )
+    } else {
+      await mkdirp( path.dirname( opts.outFile ) )
+      try {
+        const content = await fsp.readFile(opts.inFile)
+        await writeDocument({
           file: opts.outFile,
-          content: fs.readFileSync( opts.inFile ),
+          content,
           emitter: opts.emitter,
-        } );
+        })
+      } catch (error) {
+        throw error
       }
+    }
 
-      if ( opts.emitter ) console.log( BUILD_PAGE_END( opts.inFile ) )
-      done();
-    })
+    if ( opts.emitter ) console.log( BUILD_PAGE_END( opts.inFile ) )
+    if (done) done()
   }
 
   /**
@@ -1679,15 +1770,17 @@ module.exports.generator = function (config, options, logger, fileParser) {
    *                                   If true, other processes can operate on the partially built site.
    * @param  {Function} done Task done callback.
    */
-  this.buildStatic = function(opts, done) {
+  this.buildStatic = async function(opts, done) {
     var task = { type: 'static' };
 
-    buildQueue.push(Object.assign( task, opts ), function( error ) {
-      if ( error ) {
-        return done( error )
-      }
-      done();
-    });
+    return new Promise((resolve, reject) => {
+      buildQueue.push(Object.assign( task, opts ), function( error ) {
+        if (error && done) done(error)
+        if (error) return reject(error)
+        if (done) done()
+        resolve()
+      });
+    })
   };
 
   this.buildStyles = function (opts, done) {
@@ -1725,16 +1818,19 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Function}   done     Callback passed either a true value to indicate its done, or an error
    * @param  {Function}   cb       Callback called after finished, passed list of files changed and done function
    */
-  this.realBuildBoth = function(opts, done, cb) {
+  this.realBuildBoth = async function(opts, done, cb) {
+    debug('real-build-both')
+    debug(opts)
     self.cachedData = null;
     var series = []
 
+    let dataSet
     if ( opts.data ) {
-      var dataSet = setDataFrom( opts.data )
+      dataSet = setDataFrom( opts.data )
       setSettingsFrom( opts.settings )
     }
     else {
-      var dataSet = false;
+      dataSet = false;
       series = series.concat( [ cleanFilesStep ] )
     }
 
@@ -1748,57 +1844,51 @@ module.exports.generator = function (config, options, logger, fileParser) {
       renderPagesStep( opts ),
     ] )
 
-    async.series( series, handleSeries )
+    return new Promise((resolve, reject) => {
+      async.series( series, handleSeries )
 
-    function handleSeries ( error ) {
-      if ( error ) done( error )
-      cb( done )
+      function handleSeries ( error ) {
+        if (error && done) done(error)
+        if (cb && done) cb( done )
+        if (error) return reject(error)
+        resolve()
+      }
+    })
+
+    async function cleanFilesStep (step) {
+      await self.cleanFiles()
+      step()
     }
 
-    function cleanFilesStep ( step ) {
-      self.cleanFiles( null, step )
+    async function getDataStep ( step ) {
+      await getData()
+      step()
     }
 
-    function openSearchEntryStreamStep ( step ) {
-      self.openSearchEntryStream( step )
-    }
-
-    function getDataStep ( step ) {
-      getData( function ( data ) {
-        step()
-      } )
-    }
-
-    function writeDataCacheStep ( step ) {
-      writeDataCache( { file: DATA_CACHE_PATH, data: self.cachedData } )
+    async function writeDataCacheStep ( step ) {
+      await writeDataCache( { file: DATA_CACHE_PATH, data: self.cachedData } )
       step()
     }
 
     function renderTemplatesStep ( opts ) {
-      return function renderTemplatesStepFn ( step ) {
-        self.renderTemplates( opts, null, step )
+      return async function renderTemplatesStepFn ( step ) {
+        await self.renderTemplates(opts)
+        step()
       }
     }
 
     function copyStaticStep ( opts ) {
-      return function copyStaticFn ( step ) {
-        self.copyStatic( opts, step )
+      return async function copyStaticFn ( step ) {
+        await self.copyStatic( opts )
+        step()
       }
     }
 
     function renderPagesStep ( opts ) {
-      return function renderPagesStepFn ( step ) {
-        self.renderPages( opts, null, renderHandler )
-
-        function renderHandler ( error ) {
-          if ( error ) return step( error )
-          step()
-        }
+      return async function renderPagesStepFn ( step ) {
+         await self.renderPages( opts )
+         step()
       }
-    }
-
-    function closeSearchEntryStream ( step ) {
-      self.closeSearchEntryStream( step )
     }
   };
 
@@ -1953,11 +2043,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Array}      files     List of files to reload
    * @param  {Function}   done      Callback passed either a true value to indicate its done, or an error
    */
-  this.reloadFiles = function(done) {
+  this.reloadFiles = async function(done) {
+    debug('reload-files')
     var fileList = 'true';
 
     if(self.staticHashs !== false && fs.existsSync('.build/static')) {
-      var newFiles = wrench.readdirSyncRecursive('.build/static');
+      var newFiles = await pglob('**/*', { cwd: '.build/static' })
 
       newFiles.forEach(function(file) {
         var file = '.build/static/' + file;
@@ -1985,7 +2076,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
         if(done) done(true);
         self.staticHashs = false;
         self.changedStaticFiles = [];
-        return;
+        return Promise.resolve()
       }
 
       fileList = self.changedStaticFiles.join(',');
@@ -1994,10 +2085,12 @@ module.exports.generator = function (config, options, logger, fileParser) {
       self.changedStaticFiles = [];
     }
 
-
-    request({ url : 'http://localhost:' + liveReloadPort + '/changed?files=' + fileList, timeout: 10  }, function(error, response, body) {
-      if(done) done(true);
-    });
+    return new Promise ((resolve, reject) => {
+      request({ url : 'http://localhost:' + liveReloadPort + '/changed?files=' + fileList, timeout: 10  }, function(error, response, body) {
+        if(done) done(true);
+        resolve()
+      });
+    })
   };
 
   /**
@@ -2229,127 +2322,6 @@ module.exports.generator = function (config, options, logger, fileParser) {
       return `${ siteName.split( ',1' )[ 0 ] } ${base}`
     }
   };
-
-  /**
-   * Sets up asset generation (automatic versioning) for pushing to production
-   * @param  {Object}    grunt  Grunt object from generatorTasks
-   */
-  this.assets = function(grunt, done) {
-
-    removeDirectory('.whdist', function() {
-
-      mkdirp.sync('.whdist');
-
-      var files = wrench.readdirSyncRecursive('pages');
-
-      files.forEach(function(file) {
-        var originalFile = 'pages/' + file;
-        var destFile = '.whdist/pages/' + file;
-
-        if(!fs.lstatSync(originalFile).isDirectory())
-        {
-          var content = fs.readFileSync(originalFile);
-
-          if(path.extname(originalFile) === '.html') {
-            content = content.toString();
-            content = content.replace('\r\n', '\n').replace('\r', '\n');
-          }
-
-          mkdirp.sync(path.dirname(destFile));
-          fs.writeFileSync(destFile, content);
-        }
-      });
-
-      files = wrench.readdirSyncRecursive('templates');
-
-      files.forEach(function(file) {
-        var originalFile = 'templates/' + file;
-        var destFile = '.whdist/templates/' + file;
-
-        if(!fs.lstatSync(originalFile).isDirectory())
-        {
-          var content = fs.readFileSync(originalFile);
-
-          if(path.extname(originalFile) === '.html') {
-            content = content.toString();
-            content = content.replace('\r\n', '\n').replace('\r', '\n');
-          }
-
-          mkdirp.sync(path.dirname(destFile));
-          fs.writeFileSync(destFile, content);
-        }
-      });
-
-      files = wrench.readdirSyncRecursive('static');
-
-      files.forEach(function(file) {
-        var originalFile = 'static/' + file;
-        var destFile = '.whdist/static/' + file;
-
-        if(!fs.lstatSync(originalFile).isDirectory())
-        {
-          var content = fs.readFileSync(originalFile);
-
-          if(path.extname(originalFile) === '.html') {
-            content = content.toString();
-            content = content.replace('\r\n', '\n').replace('\r', '\n');
-          }
-
-          mkdirp.sync(path.dirname(destFile));
-          fs.writeFileSync(destFile, content);
-        }
-      });
-
-      grunt.task.run('useminPrepare');
-      grunt.task.run('assetsMiddle');
-
-      done();
-    });
-
-  }
-
-  /**
-   * Run asset versioning software if configs exist for them
-   * @param  {Object}    grunt  Grunt object from generatorTasks
-   */
-  this.assetsMiddle = function(grunt) {
-    grunt.option('force', false);
-
-    if(!_.isEmpty(grunt.config.get('concat')))
-    {
-      grunt.task.run('concat');
-    }
-
-    if(!_.isEmpty(grunt.config.get('cssmin')))
-    {
-      grunt.task.run('cssmin');
-    }
-
-    grunt.task.run('rev');
-    grunt.task.run('usemin');
-    grunt.task.run('assetsAfter');
-  }
-
-  /**
-   * Finish asset versioning
-   * @param  {Object}    grunt  Grunt object from generatorTasks
-   */
-  this.assetsAfter = function(grunt, done) {
-    removeDirectory('.tmp', function() {
-      var files = wrench.readdirSyncRecursive('static');
-
-      files.forEach(function(file) {
-        var filePath = 'static/' + file;
-        var distPath = '.whdist/static/' + file;
-        if(!fs.lstatSync(filePath).isDirectory() && !fs.existsSync(distPath)) {
-          var fileData = fs.readFileSync(filePath);
-          fs.writeFileSync(distPath, fileData);
-        }
-      });
-
-      done();
-    });
-  }
 
   /**
    * Enables strict mode, exceptions cause full crash, normally for production (so bad generators do not ruin sites)
