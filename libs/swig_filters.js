@@ -237,7 +237,7 @@ module.exports.init = function(swig) {
   };
 
   var markdown = function(input) {
-    return marked(input);
+    return marked.parse(input);
   };
 
   var startsWith = function(input, string) {

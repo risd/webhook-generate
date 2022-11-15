@@ -45,7 +45,6 @@ module.exports = function(grunt) {
           middleware: function(connect, options, middlewares) {
             // Return array of whatever middlewares you want
             middlewares.unshift(header({ 'X-Webhook-Local' : true }));
-            middlewares.push(require('grunt-connect-proxy/lib/utils').proxyRequest);
             middlewares.push(function(req, res, next) {
               if ('GET' != req.method && 'HEAD' != req.method) return next();
 
@@ -56,17 +55,6 @@ module.exports = function(grunt) {
             return middlewares;
           }
         },
-        proxies: [
-            {
-                context: '/webhook-uploads',
-                host: conf.imageproxy ? conf.imageproxy : (conf.custom ? unescapeSite(conf.siteName) : (conf.siteName + '.webhook.org')),
-                port: 80,
-                changeOrigin: true,
-                headers: {
-                  host: conf.imageproxy ? conf.imageproxy : (conf.custom ? unescapeSite(conf.siteName) : (conf.siteName + '.webhook.org'))
-                }
-            }
-        ]
       }
     },
 
@@ -86,20 +74,7 @@ module.exports = function(grunt) {
         logConcurrentOutput: true
       },
       "wh-concurrent": {
-        tasks: ["watch", "webListener-open"]
-      }
-    },
-
-    // Compile static assets into .whdist/static
-    // Copy pages/html files into .whdist/pages and .whdist/html
-    // Run rev on .whdist/static and then run usemin on .whdist/pages and .whdist/html
-    // Copy unmodified static folder into .whdist/static
-
-    useminPrepare: {
-      src: ['.whdist/pages/**/*.html', '.whdist/templates/**/*.html'],
-      options: {
-        root: '.',
-        dest: '.whdist'
+        tasks: ["wh-watch", "webListener-open"]
       }
     },
 
@@ -112,13 +87,6 @@ module.exports = function(grunt) {
         }]
       }
     },
-
-    usemin: {
-      html: ['.whdist/pages/**/*.html', '.whdist/templates/**/*.html'],
-      options: {
-        assetsDirs: ['.whdist']
-      }
-    }
   };
 
   for(var key in mergeConfig) {
@@ -133,13 +101,10 @@ module.exports = function(grunt) {
 
   grunt.initConfig(oldConfig);
 
-  grunt.loadNpmTasks('grunt-simple-watch');
+  grunt.loadNpmTasks('grunt-contrib-watch');
   grunt.loadNpmTasks('grunt-rev');
   grunt.loadNpmTasks('grunt-contrib-concat');
-  grunt.loadNpmTasks('grunt-contrib-cssmin');
   grunt.loadNpmTasks('grunt-contrib-connect');
-  grunt.loadNpmTasks('grunt-connect-proxy');
   grunt.loadNpmTasks('grunt-open');
   grunt.loadNpmTasks('grunt-concurrent');
-  grunt.loadNpmTasks('grunt-usemin');
 };
