@@ -46,7 +46,7 @@ test('build-template', async (t) => {
   try {
     await pspawn('grunt', [
       'build-template',
-      '--inFile=templates/universalpages/individual.html',
+      '--inFile=templates/collections/individual.html',
       '--data=./.build/data.json',
       '--emitter'
     ])
@@ -141,6 +141,18 @@ test('build', async (t) => {
   } catch (error) {
     console.error(error)
     t.fail('build:failed')
+  }
+  t.end()
+})
+
+
+test('build-order', async (t) => {
+  try {
+    await pspawn('grunt', ['build-order'])
+    t.ok('build-order:success')
+  } catch (error) {
+    console.error(error)
+    t.fail('build-order:failed')
   }
   t.end()
 })
