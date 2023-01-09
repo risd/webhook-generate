@@ -309,21 +309,6 @@ module.exports = function(grunt) {
   });
 
   // Change this to optionally prompt instead of requiring a sitename
-  grunt.registerTask('assets', 'Initialize the firebase configuration file (installer should do this as well)', function() {
-    var done = this.async();
-    generator.assets(grunt, done);
-  });
-
-  grunt.registerTask('assetsMiddle', 'Initialize the firebase configuration file (installer should do this as well)', function() {
-    generator.assetsMiddle(grunt);
-  });
-
-  grunt.registerTask('assetsAfter', 'Initialize the firebase configuration file (installer should do this as well)', function() {
-    var done = this.async();
-    generator.assetsAfter(grunt, done);
-  });
-
-  // Change this to optionally prompt instead of requiring a sitename
   grunt.registerTask('init', 'Initialize the firebase configuration file (installer should do this as well)', function() {
     var done = this.async();
 
