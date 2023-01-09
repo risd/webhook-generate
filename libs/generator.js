@@ -490,6 +490,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    */
   this.buildOrder = async function () {
     const folder = path.join(process.cwd(), '.build-order')
+    await mkdirp(folder)
     
     var excludeExtensions = filterExtensions([ '' ])
     const allTemplateFiles = await pglob('templates/**/*', { nodir: true })
