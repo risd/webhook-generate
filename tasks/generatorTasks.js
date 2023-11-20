@@ -1,7 +1,7 @@
 
 var curVersion = 'v55';
 
-var request = require('request');
+var axios = require('axios');
 
 module.exports = function(grunt) {
 
@@ -11,27 +11,28 @@ module.exports = function(grunt) {
     firebaseUri = 'https://' + firebaseUrl +  '.firebaseio.com/generator_version.json';
   }
 
-  var checkVersion = function(callback) {
-    if(firebaseUri === null) {
-      callback();
-    } else {
-      request({ url: firebaseUri, json: true }, function(e, r, body) {
-        if(body) {
-          if(body !== curVersion) {
-            console.log('========================================================'.red);
-            console.log('# This site is using old Webhook code.     #'.red);
-            console.log('========================================================'.red);
-            console.log('#'.red + ' To update, run "wh update" in this folder.')
-            console.log('# ---------------------------------------------------- #'.red)
-          }
-
-          callback();
-        } else {
-          callback();
-        }
-      });
+  var checkVersion = async function(callback) {
+    if (firebaseUri === null) return callback?.()
+    const res = await axios(firebaseUri)
+    if (res.data === curVersion) {
+      console.log(res.data)
+    }  
+    else {
+      console.log('========================================================'.red);
+      console.log('# This site is using old Webhook code.     #'.red);
+      console.log('========================================================'.red);
+      console.log('#'.red + ` Current: ${curVersion}.`)
+      console.log('#'.red + ` Latest: ${res.data}.`)
+      console.log('#'.red + ' To update, run "wh update" in this folder.')
+      console.log('# ---------------------------------------------------- #'.red)
     }
+    return callback?.()
   };
+
+  grunt.registerTask('version', 'Check version and report if out of date.', function () {
+    const done = this.async()
+    checkVersion(() => done())
+  })
 
   var npmBin = grunt.option('npmbin')
   var npmCache = grunt.option('npmcache')
@@ -309,6 +310,21 @@ module.exports = function(grunt) {
   });
 
   // Change this to optionally prompt instead of requiring a sitename
+  grunt.registerTask('assets', 'Initialize the firebase configuration file (installer should do this as well)', function() {
+    var done = this.async();
+    generator.assets(grunt, done);
+  });
+
+  grunt.registerTask('assetsMiddle', 'Initialize the firebase configuration file (installer should do this as well)', function() {
+    generator.assetsMiddle(grunt);
+  });
+
+  grunt.registerTask('assetsAfter', 'Initialize the firebase configuration file (installer should do this as well)', function() {
+    var done = this.async();
+    generator.assetsAfter(grunt, done);
+  });
+
+  // Change this to optionally prompt instead of requiring a sitename
   grunt.registerTask('init', 'Initialize the firebase configuration file (installer should do this as well)', function() {
     var done = this.async();
 
@@ -331,6 +347,14 @@ module.exports = function(grunt) {
 
   // Check if initialized properly before running all these tasks
   grunt.registerTask('default',  'Clean, Build, Start Local Server, and Watch', function() {
+    if (grunt.option('noWatch')) {
+      grunt.log.write('Will not start development server.')
+    }
+    else {
+      grunt.task.run('connect:wh-server')
+      grunt.task.run('concurrent:wh-concurrent')  
+    }
+
     if (grunt.option('skipBuild')) {
       grunt.task.run('build-page-cms')
     } else {
@@ -338,14 +362,6 @@ module.exports = function(grunt) {
       grunt.task.run('sass')
       grunt.task.run('postcss')
       grunt.task.run('build')
-    }
-
-    if (grunt.option('noWatch')) {
-      grunt.log.write('Will not start development server.')
-    }
-    else {
-      grunt.task.run('connect:wh-server')
-      grunt.task.run('concurrent:wh-concurrent')  
     }
   });
 
