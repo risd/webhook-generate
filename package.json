@@ -1,6 +1,6 @@
 {
   "name": "@risd/webhook-generate",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Grunt site generator for risd/webhook",
   "repository": {
     "type": "git",
@@ -40,6 +40,7 @@
     "adm-zip": "^0.4.13",
     "async": "^0.2.10",
     "autoprefixer": "^10.4.2",
+    "axios": "^1.6.2",
     "cheerio": "^1.0.0-rc.2",
     "colors": "^0.6.2",
     "connect-header": "^0.0.5",
@@ -68,7 +69,6 @@
     "node-bourbon": "^4.2.3",
     "nodejs-websocket": "^1.7.2",
     "proxy-middleware": "^0.5.0",
-    "request": "^2.88.2",
     "rm-webhook": "^3.0.4",
     "sass": "^1.48.0",
     "tape": "^5.4.1",
@@ -78,6 +78,6 @@
     "win-spawn": "^2.0.0"
   },
   "risd.systems": {
-    "generate": "3.0.0"
+    "generate": "3.0.3"
   }
 }

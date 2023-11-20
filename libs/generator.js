@@ -2,12 +2,13 @@
 
 // Requires
 const debug = require('debug')('generator')
+const { pipeline } = require('node:stream/promises')
 const {
   initializeDatabase,
   getBucketData,
   getDnsChildData,
 } = require('./firebase.js')
-var request = require('request');
+var axios = require('axios');
 var mkdirp = require('mkdirp');
 var path = require('path');
 var fs = require('fs');
@@ -650,27 +651,23 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {string}   zipUrl     Url to zip file to download
    * @param  {Function}   callback   Callback, first parameter is error (true if error occured);
    */
-  var downloadRepo = function(zipUrl, callback) {
+  var downloadRepo = async function(zipUrl, callback) {
     logger.ok('Downloading preset...');
 
     // Keep track if the request fails to prevent the continuation of the install
     var requestFailed = false;
 
     // TODO: have this hit different templating repos
-    var repoRequest = request(zipUrl);
-
-    repoRequest
-    .on('response', function (response) {
-      // If we fail, set it as failing and remove zip file
-      if (response.statusCode !== 200) {
-        requestFailed = true;
-        fs.unlinkSync('.preset.zip');
-        callback(true);
-      }
-    })
-    .pipe(fs.createWriteStream('.preset.zip'))
-    .on('close', function () {
-      if (requestFailed) return;
+    try {
+      const res = await axios({
+        method: 'get',
+        url: zipUrl,
+        responseType: 'stream',
+      })
+      await pipeline(
+        res.data,
+        fs.createWriteStream('.preset.zip')
+      )
 
       // Unzip into temporary file
       var zip = new Zip('.preset.zip');
@@ -705,104 +702,99 @@ module.exports.generator = function (config, options, logger, fileParser) {
       }
 
       fs.unlinkSync('.preset.zip');
-      callback();
-    });
+    }
+    catch (error) {
+      requestFailed = true
+      debug('Failed to process preset')
+      debug(error)
+      try {
+        fs.unlinkSync('.preset.zip');
+      }
+      catch (error) {
+        debug('Could not unlink preset, probably never downloaded.')
+      }
+    }
+    finally {
+      callback?.(requestFailed)
+    }
   };
 
 
-  var resetGenerator = function(callback) {
+  var resetGenerator = async function(callback) {
     logger.ok('Resetting Generator...');
     var zipUrl = config.get('webhook').generator_url || default_generator_url;
 
     // Keep track if the request fails to prevent the continuation of the install
     var requestFailed = false;
 
-    // TODO: have this hit different templating repos
-    var repoRequest = request(zipUrl);
-
-    repoRequest
-    .on('response', function (response) {
-      // If we fail, set it as failing and remove zip file
-      if (response.statusCode !== 200) {
-        requestFailed = true;
-        fs.unlinkSync('.reset.zip');
-        callback(true);
-      }
-    })
-    .pipe(fs.createWriteStream('.reset.zip'))
-    .on('close', function () {
-      if (requestFailed) return;
+    try {
+      const res = await axios({
+        method: 'get',
+        url: zipUrl,
+        responseType: 'stream',
+      })
+      await pipeline(
+        res.data,
+        fs.createWriteStream('.reset.zip')
+      )
 
       // Unzip into temporary file
       var zip = new Zip('.reset.zip');
 
       var entries = zip.getEntries();
 
-      removeDirectory('.pages-old', function() {
-        removeDirectory('.templates-old', function() {
-          removeDirectory('.static-old', function() {
+      await fse.remove('.pages-old')
+      await fse.remove('.templates-old')
+      await fse.remove('.static-old')
 
-            try {
-              fs.renameSync('pages', '.pages-old');
-            } catch(error) {
-              fs.unlinkSync('.reset.zip');
-              callback(true);
-              return;
-            }
+      fs.renameSync('pages', '.pages-old')
 
-            try {
-              fs.renameSync('templates', '.templates-old');
-            } catch(error) {
-              fs.renameSync('.pages-old', 'pages');
-              fs.unlinkSync('.reset.zip');
-              callback(true);
-              return;
-            }
+      try {
+        fs.renameSync('templates', '.templates-old');
+      } catch(error) {
+        fs.renameSync('.pages-old', 'pages');
+        fs.unlinkSync('.reset.zip');
+        throw error
+      }
 
-            try {
-              fs.renameSync('static', '.static-old');
-            } catch(error) {
-              fs.renameSync('.pages-old', 'pages');
-              fs.renameSync('.templates-old', 'templates');
-              fs.unlinkSync('.reset.zip');
-              callback(true);
-              return;
-            }
+      try {
+        fs.renameSync('static', '.static-old');
+      } catch(error) {
+        fs.renameSync('.pages-old', 'pages');
+        fs.renameSync('.templates-old', 'templates');
+        fs.unlinkSync('.reset.zip');
+        throw error
+      }
 
-            entries.forEach(function(entry) {
-              if(entry.entryName.indexOf('pages/') === 0
-                 || entry.entryName.indexOf('templates/') === 0
-                 || entry.entryName.indexOf('static/') === 0) {
-                zip.extractEntryTo(entry.entryName, '.', true, true);
-              }
-            });
-
-            removeDirectory('.pages-old', function() {
-              removeDirectory('.templates-old', function() {
-                removeDirectory('.static-old', function() {
-                  fs.unlinkSync('.reset.zip');
-
-                  self.init(config.get('webhook').siteName,
-                    config.get('webhook').siteKey,
-                    true,
-                    config.get('webhook').firebase,
-                    config.get('webhook').server,
-                    config.get('webhook').embedly,
-                    config.get('webhook').imgix_host,
-                    config.get('webhook').imgix_secret,
-                    config.get('webhook').generator_url,
-                    function () {
-                      callback();
-                    }
-                  );
-                });
-              });
-            });
-
-          });
-        });
+      entries.forEach(function(entry) {
+        if(entry.entryName.indexOf('pages/') === 0
+           || entry.entryName.indexOf('templates/') === 0
+           || entry.entryName.indexOf('static/') === 0) {
+          zip.extractEntryTo(entry.entryName, '.', true, true);
+        }
       });
-    });
+
+      await fse.remove('.pages-old')
+      await fse.remove('.templates-old')
+      await fse.remove('.static-old')
+
+      fs.unlinkSync('.reset.zip');
+      console.log('Run \`wh init\` to get a valid firebase config.')
+    }
+    catch (error) {
+      requestFailed = true
+      debug('Failed to process reset')
+      debug(error)
+      try {
+        fs.unlinkSync('.reset.zip');
+      }
+      catch (error) {
+        debug('Could not unlink reset, probably never downloaded.')
+      }
+    }
+    finally {
+      callback?.(requestFailed)
+    }
   };
 
   /**
@@ -1974,12 +1966,16 @@ module.exports.generator = function (config, options, logger, fileParser) {
       self.changedStaticFiles = [];
     }
 
-    return new Promise ((resolve, reject) => {
-      request({ url : 'http://localhost:' + liveReloadPort + '/changed?files=' + fileList, timeout: 10  }, function(error, response, body) {
-        if(done) done(true);
-        resolve()
-      });
-    })
+    const url = 'http://localhost:' + liveReloadPort + '/changed?files=' + fileList
+    try {
+      await axios({ method: 'get', url }) 
+    }
+    catch (error) {
+      debug('Could not reload files, we swallow this error.')
+    }
+    finally {
+      done?.(true)
+    }
   };
 
   /**
@@ -2172,7 +2168,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
    * @param  {Boolean}   copyCms   True if the CMS should be overwritten, false otherwise
    * @param  {Function}  done      Callback to call when operation is done
    */
-  this.init = function(firebaseConfOptions, copyCms, done) {
+  this.init = async function (firebaseConfOptions, copyCms, done) {
     var oldConf = config.get('webhook');
 
     var confFile = fs.readFileSync('./libs/.firebase.conf.jst');
@@ -2203,7 +2199,7 @@ module.exports.generator = function (config, options, logger, fileParser) {
       fs.writeFileSync('./pages/cms.html', cmsTemplated);
     }
 
-    done(true);
+    done?.(true);
 
     function cmsTitleForSiteName ( siteName ) {
       var base = 'CMS'
