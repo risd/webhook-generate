@@ -14,6 +14,7 @@
   "files": [
     "*",
     ".gitignore",
+    ".npmrc",
     "!.git"
   ],
   "engines": {
